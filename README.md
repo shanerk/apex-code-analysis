@@ -2,7 +2,7 @@
 
 Tool to parse Apex classes and produce a report of unused public methods
 
-Inspired and partially based on https://github.com/allnulled/apexcodeanalysis
+Inspired and partially based on https://github.com/allnulled/javadoc
 
 ## 1. Installation
 

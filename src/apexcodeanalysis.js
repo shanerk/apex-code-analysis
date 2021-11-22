@@ -121,13 +121,14 @@ module.exports = {
         allClasses.push(c);
       });
 
-      ///// Filtered classes
+      ///// Filtered classes (only public and global)
       classData = filter(classData);
       __LOG__("Classes = " + classData.length);
 
       classData.forEach(function(data) {
         let c = getClass(data);
         classes.push(c);
+        // TODO: Push to  global classes
       });
 
       classes = setClassBodyCodeOnly(allClasses);
@@ -167,6 +168,7 @@ module.exports = {
 
       if (propertyData.length > 0) {
         children = children.concat(parseData(propertyData, ENTITY_TYPE.PROPERTY));
+        // TODO: Add these to global property list
       }
 
       ///// Handle Constructors
@@ -181,6 +183,7 @@ module.exports = {
 
       if (constructorData.length > 0) {
         children = children.concat(parseData(constructorData, ENTITY_TYPE.CONSTRUCTOR));
+        // TODO: Add these to global constructors list
       }
 
       ///// Handle Abstract Methods
@@ -195,6 +198,7 @@ module.exports = {
 
       if (abstractData.length > 0) {
         children = children.concat(parseData(abstractData, ENTITY_TYPE.METHOD));
+        // TODO: Add these to global abstract methods list
       }
 
       ///// Handle Methods
@@ -209,21 +213,22 @@ module.exports = {
 
       if (methodData.length > 0) {
         children = children.concat(parseData(methodData, ENTITY_TYPE.METHOD));
+        // TODO: Add these to global mthods list
       }
 
       return children;
     };
 
     ///// Parse Data ///////////////////////////////////////////////////////////////////////////////////////////////////
-    function parseData(apexcodeanalysisData, entityType, header) {
-      let apexcodeanalysisFileDataLines = [];
+    function parseData(rawData, entityType, header) {
+      let fileDataLines = [];
 
-      apexcodeanalysisData.forEach(function (data) {
+      rawData.forEach(function (data) {
         let lastObject = {
           name: "default",
           text: ""
         };
-        let apexcodeanalysisCommentData = [];
+        let commentData = [];
 
         if (entityType === ENTITY_TYPE.CLASS) {
           if (data[0].includes('@IsTest')) {
@@ -242,59 +247,27 @@ module.exports = {
         }
         let entityHeader = header === undefined ? getEntity(data, entityType) : header;
 
-        ///// Skip invalid entities, or entities that have non-included accesors (see getEntity() method)
+        ///// Skip invalid entities, or entities that have excluded accesors (see getEntity() method)
         if (entityHeader === undefined) return;
 
-        ///// Process apexcodeanalysiss, if any
-        if (data[0].match(REGEX_ACA) !== null) {
-          let apexcodeanalysisCommentClean = "\n" + data[0].split("*/")[0].replace(REGEX_BEGINING_AND_ENDING, "");
-          let apexcodeanalysisLines = apexcodeanalysisCommentClean.split(REGEX_ACA_LINE_BEGINING);
-          let attributeMatch = "default";
-
-          apexcodeanalysisLines.forEach(function (apexcodeanalysisLine) {
-            let attrMatch = apexcodeanalysisLine.match(REGEX_ACA_LINE_BEGINING_ATTRIBUTE);
-            let isNewMatch = (!!attrMatch);
-            if (isNewMatch) {
-              attributeMatch = attrMatch[0].replace(/_/g, " ");
-            }
-            if (isNewMatch) {
-              apexcodeanalysisCommentData.push(lastObject);
-              lastObject = {
-                name: attributeMatch,
-                text: apexcodeanalysisLine.replace(REGEX_ACA_LINE_BEGINING_ATTRIBUTE, "")
-                  .replace(/^ /g, "")
-                  .replace(/(\*)( )+(\/)/g, function (match) {
-                    return match.substr(0, 1) + match.substr(1, match.length - 3) + match.substr(match.length - 1);
-                  })
-              };
-            } else {
-              lastObject.text += "\n" + apexcodeanalysisLine
-                .replace(/^ /g, "")
-                .replace(/(\*)( )+(\/)/g, function (match) {
-                  return match.substr(0, 1) + match.substr(1, match.length - 3) + match.substr(match.length - 1);
-                });
-            }
-          });
-          lastObject.text = lastObject.text.replace(/\/\*\*( )*/g,``);
-          apexcodeanalysisCommentData.push(lastObject);
-        } else {
-          if (entityHeader.isapexcodeanalysisRequired && !entityHeader.isDeprecated) {
-            apexcodeanalysisCommentData.push({ name: "todo", text: STR_TODO.replace("_ENTITY_", entityHeader.name) });
-          }
+        ///// Flag for todo
+        if (entityHeader.isCommentRequired && !entityHeader.isDeprecated) {
+          commentData.push({ name: "todo", text: STR_TODO.replace("_ENTITY_", entityHeader.name) });
         }
-        ///// apexcodeanalysiss are pushed onto the stack after the header for all entity types except: Property, Enum
+        
+        ///// Push onto output stack
         if (entityType != ENTITY_TYPE.PROPERTY && entityHeader.name != "enum") {
-          apexcodeanalysisFileDataLines.push([entityHeader]);
-          apexcodeanalysisFileDataLines.push(apexcodeanalysisCommentData);
+          fileDataLines.push([entityHeader]);
+          //fileDataLines.push(commentData);
         } else {
-          ///// For Property & Enum entities, add the apexcodeanalysis as the descrip
-          if (apexcodeanalysisCommentData[0] && !entityHeader.isDeprecated)
-            entityHeader.descrip = apexcodeanalysisCommentData[0].text;
+          ///// For Property & Enum entities, add the comment as the descrip
+          if (commentData[0] && !entityHeader.isDeprecated)
+            entityHeader.descrip = commentData[0].text;
 
-            apexcodeanalysisFileDataLines.push([entityHeader]);
+            //fileDataLines.push([entityHeader]);
         }
       });
-      return apexcodeanalysisFileDataLines;
+      return fileDataLines;
     }
 
     ///// Format Output ////////////////////////////////////////////////////////////////////////////////////////////////
@@ -385,7 +358,7 @@ module.exports = {
                     }
                     text = `|${pname}${deprecated}|${descrip}|`;
                   } else {
-                    text = `* TODO: Parameter ${pname} defined in class apexcodeanalysis; move to method or constructor.`;
+                    text = `* TODO: Parameter ${pname} defined in class comment; move to method or constructor.`;
                   }
 
                 ///// Return values
@@ -393,7 +366,7 @@ module.exports = {
                   if (isMethod) {
                     text = '\n##### Return value:\n\n' + text;
                   } else {
-                    text = `* TODO: Return value defined in class apexcodeanalysis, but should not be.`;
+                    text = `* TODO: Return value defined in class comment, but should not be.`;
                   }
 
                 ///// Properties
@@ -463,9 +436,9 @@ module.exports = {
         let lang = getLang(file);
         __LOG__(`File: ${file} Lang: ${lang}`);
         let contents = fs.readFileSync(file).toString();
-        let apexcodeanalysisMatches = parseFile(contents, lang);
-        if (apexcodeanalysisMatches.length !== 0) {
-          docComments[file] = apexcodeanalysisMatches;
+        let matches = parseFile(contents, lang);
+        if (matches.length !== 0) {
+          docComments[file] = matches;
         }
       }
       return docComments;
@@ -485,9 +458,9 @@ module.exports = {
       let ret = [];
       let result = undefined;
       let i = 0;
-      let noapexcodeanalysiss = str.replace(REGEX_ACA, ``).replace(/\/\/.*/g, ``);
+      let noComments = str.replace(REGEX_ACA, ``).replace(/\/\/.*/g, ``);
       while (result = regexp.exec(str)) {
-        if (noapexcodeanalysiss.includes(result[0]) ||
+        if (noComments.includes(result[0]) ||
           result[0].trim().substring(0,3) === `/**` ||
           !excludeComments
           ) {
@@ -583,7 +556,7 @@ module.exports = {
         line: getLineNumber(data),
         start: data.index,
         isDeprecated: (data[0].includes(`@Deprecated`)),
-        isapexcodeanalysisRequired: true,
+        isCommentRequired: true,
         isExclude: isHidden(data)
       };
       return ret;
@@ -602,7 +575,7 @@ module.exports = {
         line: getLineNumber(data),
         start: data.index,
         isDeprecated: (data[0].includes(`@Deprecated`)),
-        isapexcodeanalysisRequired: true,
+        isCommentRequired: true,
         isExclude: isHidden(data)
       };
       return ret;
@@ -617,7 +590,7 @@ module.exports = {
         line: getLineNumber(data),
         start: data.index,
         isDeprecated: (data[0].includes(`@Deprecated`)),
-        isapexcodeanalysisRequired: true,
+        isCommentRequired: true,
         isExclude: isHidden(data)
       };
       return ret;
@@ -640,7 +613,7 @@ module.exports = {
         descrip: ``,
         level: undefined,
         isDeprecated: (data[0].includes(`@Deprecated`)),
-        isapexcodeanalysisRequired: (data[3] !== `enum` && (!data[5] || data[5].includes(`exception`))),
+        isCommentRequired: (data[3] !== `enum` && (!data[5] || data[5].includes(`exception`))),
         isExclude: isHidden(data)
       };
       return ret;

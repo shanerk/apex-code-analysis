@@ -1,16 +1,16 @@
 {
   "name": "apexcodeanalysis",
   "version": "0.0.1",
-  "description": "Tool to parse Apex, Java and Javascript repos to generate Markdown or JSON API documentation.",
+  "description": "Tool to parse Apex classes and produce a report of unused public methods.",
   "main": "src/apexcodeanalysis.js",
   "preferGlobal": true,
   "bin": {
-    "apexcodeanalysis2": "bin/apexcodeanalysis.cli.js"
+    "apexcodeanalysis": "bin/apexcodeanalysis.cli.js"
   },
   "scripts": {
-    "gitupload": "gitanoaddfiles bin/apexcodeanalysis2.cli.js  docs/README.* package* README.md  src/apexcodeanalysis2.js  test/* test/examples/* && gitanopush",
-    "test": "node test/apexcodeanalysis2.spec.js",
-    "coverage": "node_modules/.bin/rimraf coverage .nyc_output && node_modules/.bin/nyc --reporter=html node test/apexcodeanalysis2.spec.js"
+    "gitupload": "gitanoaddfiles bin/apexcodeanalysis.cli.js  docs/README.* package* README.md  src/apexcodeanalysis.js  test/* test/examples/* && gitanopush",
+    "test": "node test/apexcodeanalysis.spec.js",
+    "coverage": "node_modules/.bin/rimraf coverage .nyc_output && node_modules/.bin/nyc --reporter=html node test/apexcodeanalysis.spec.js"
   },
   "author": "",
   "license": "ISC",
@@ -32,7 +32,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/shanekenyon87/apexcodeanalysis2.git"
+    "url": "git+https://github.com/shanekenyon87/apexcodeanalysis.git"
   },
   "keywords": [
     "apexcodeanalysis",
@@ -50,7 +50,7 @@
     "tags"
   ],
   "bugs": {
-    "url": "https://github.com/shanekenyon87/apexcodeanalysis2/issues"
+    "url": "https://github.com/shanekenyon87/apexcodeanalysis/issues"
   },
-  "homepage": "https://github.com/shanekenyon87/apexcodeanalysis2#readme"
+  "homepage": "https://github.com/shanekenyon87/apexcodeanalysis#readme"
 }

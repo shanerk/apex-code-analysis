@@ -31,4 +31,4 @@ const args = require("yargs")
 		help: "help"
 	}).argv;
 
-require(__dirname + "/../src/apexcodeanalysis2.js").generate(args);
+require(__dirname + "/../src/apexcodeanalysis.js").generate(args);
