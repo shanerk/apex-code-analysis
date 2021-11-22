@@ -1,0 +1,56 @@
+{
+  "name": "apexcodeanalysis",
+  "version": "0.0.1",
+  "description": "Tool to parse Apex, Java and Javascript repos to generate Markdown or JSON API documentation.",
+  "main": "src/apexcodeanalysis.js",
+  "preferGlobal": true,
+  "bin": {
+    "apexcodeanalysis2": "bin/apexcodeanalysis.cli.js"
+  },
+  "scripts": {
+    "gitupload": "gitanoaddfiles bin/apexcodeanalysis2.cli.js  docs/README.* package* README.md  src/apexcodeanalysis2.js  test/* test/examples/* && gitanopush",
+    "test": "node test/apexcodeanalysis2.spec.js",
+    "coverage": "node_modules/.bin/rimraf coverage .nyc_output && node_modules/.bin/nyc --reporter=html node test/apexcodeanalysis2.spec.js"
+  },
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "globule": "1.2.0",
+    "lodash": "^4.17.11",
+    "mkdirp": "0.5.1",
+    "yargs": "11.0.0"
+  },
+  "devDependencies": {
+    "assertivity": "1.0.3",
+    "execute-command-sync": "1.0.2",
+    "nyc": "^13.3.0",
+    "rimraf": "2.6.2"
+  },
+  "directories": {
+    "doc": "docs",
+    "test": "test"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/shanekenyon87/apexcodeanalysis2.git"
+  },
+  "keywords": [
+    "apexcodeanalysis",
+    "json",
+    "markdown",
+    "glob",
+    "cli",
+    "api",
+    "documentation",
+    "comment",
+    "comments",
+    "generate",
+    "reference",
+    "document",
+    "tags"
+  ],
+  "bugs": {
+    "url": "https://github.com/shanekenyon87/apexcodeanalysis2/issues"
+  },
+  "homepage": "https://github.com/shanekenyon87/apexcodeanalysis2#readme"
+}
