@@ -14,10 +14,6 @@ module.exports = {
     const REGEX_COMMENT = /\/\*\*(?:[^\*]|\*(?!\/))*.*?\*\//gm;
     const REGEX_ATTRIBUTES = /(?:\@[^\n]*[\s]+)*/gm;
     const REGEX_WS = /\s*/;
-    // const REGEX_NBWS = /[ \t]*/;
-    // const REGEX_BEGINING_AND_ENDING = /^\/\*\*[\t ]*\n|\n[\t ]*\*+\/$/g;
-    // const REGEX_COMMENT_LINE_BEGINING = /\n[\t ]*\*[\t ]?/g;
-    // const REGEX_COMMENT_LINE_BEGINING_ATTRIBUTE = /^\@[^\n\t\r ]*/g;
     const REGEX_COMMENT_CODE_BLOCK = /{@code((?:\s(?!(?:^}))|\S)*)\s*}/gm;
     const REGEX_ACCESSORS = /^[ \t]*(global|public|private)/g;
 
@@ -28,10 +24,6 @@ module.exports = {
           .source,
       "gm"
     );
-    // const REGEX_CLASS = new RegExp(
-    //   REGEX_COMMENT.source + REGEX_WS.source + REGEX_CLASS_NODOC.source,
-    //   "gm"
-    // );
     __DBG__("REGEX_CLASS = " + REGEX_CLASS_NODOC);
 
     const REGEX_ABSTRACT_METHOD_NODOC = new RegExp(
@@ -40,12 +32,6 @@ module.exports = {
           .source,
       "gm"
     );
-    // const REGEX_ABSTRACT_METHOD = new RegExp(
-    //   REGEX_COMMENT.source +
-    //     REGEX_WS.source +
-    //     REGEX_ABSTRACT_METHOD_NODOC.source,
-    //   "gm"
-    // );
     __DBG__("REGEX_ABSTRACT_METHOD = " + REGEX_ABSTRACT_METHOD_NODOC);
 
     const REGEX_METHOD_NODOC = new RegExp(
@@ -55,10 +41,6 @@ module.exports = {
           .source,
       "gm"
     );
-    // const REGEX_METHOD = new RegExp(
-    //   REGEX_COMMENT.source + REGEX_WS.source + REGEX_METHOD_NODOC.source,
-    //   "gm"
-    // );
     __DBG__("REGEX_METHOD = " + REGEX_METHOD_NODOC);
 
     const REGEX_CONSTRUCTOR_NODOC = new RegExp(
@@ -67,10 +49,6 @@ module.exports = {
         /[ \t]+([\w]+)[ \t]*(\([^\)]*\))\s*(?:[{])/.source,
       "gm"
     );
-    // const REGEX_CONSTRUCTOR = new RegExp(
-    //   REGEX_COMMENT.source + REGEX_WS.source + REGEX_CONSTRUCTOR_NODOC.source,
-    //   "gm"
-    // );
     __DBG__("REGEX_CONSTRUCTOR = " + REGEX_CONSTRUCTOR_NODOC);
 
     const REGEX_PROPERTY_NODOC = new RegExp(
@@ -80,14 +58,7 @@ module.exports = {
           .source,
       "gm"
     );
-    // const REGEX_PROPERTY = new RegExp(
-    //   REGEX_COMMENT.source + REGEX_WS.source + REGEX_PROPERTY_NODOC.source,
-    //   "gm"
-    // );
     __DBG__("REGEX_PROPERTY = " + REGEX_PROPERTY_NODOC);
-
-    // const STR_TODO =
-    //   "TODO: No documentation currently exists for this _ENTITY_.";
 
     const ENTITY_TYPE = {
       CLASS: 1,
@@ -113,7 +84,7 @@ module.exports = {
           exclude: ["**/node_modules/**/*"],
           output: undefined,
           format: "markdown",
-          accessors: ["global", "public"]
+          accessors: ["global", "public", "private", "protected"]
         },
         optionsArg
       );
@@ -144,7 +115,7 @@ module.exports = {
       });
 
       ///// Filtered classes (only public and global)
-      classData = filter(classData);
+      classData = filter(classData, lang, undefined, 'classes');
       __LOG__("Classes = " + classData.length);
 
       classData.forEach(function(data) {
@@ -557,7 +528,7 @@ module.exports = {
         ) {
           ret.push(target);
         } else {
-          __DBG__(`Filtered out ${JSON.stringify(target)}`);
+          __DBG__(`Filtered out ${target[1]} accessor for entity ${target[4]}.`);
         }
       });
       if (ret.length < data.length)
