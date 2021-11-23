@@ -5,60 +5,62 @@ module.exports = {
     let options = undefined;
     let isTestClass = false;
     let isDeprecatedClass = false;
+    const symbols = new Map();
 
     const CLASS_TYPES = [`Class`, `Interface`];
     const CLASS_AND_ENUM_TYPES = [`Class`, `Interface`, `Enum`];
     const HIDDEN_TAGS = [`@exclude`, `@hidden`];
 
+    const REGEX_SYMBOL = /\.([a-zA-Z0-9]+)\(/g;
+
     const REGEX_STRING = /([\"'`])(?:[\s\S])*?(?:(?<!\\)\1)/gm;
     const REGEX_COMMENT = /\/\*\*(?:[^\*]|\*(?!\/))*.*?\*\//gm;
     const REGEX_ATTRIBUTES = /(?:\@[^\n]*[\s]+)*/gm;
-    const REGEX_WS = /\s*/;
     const REGEX_COMMENT_CODE_BLOCK = /{@code((?:\s(?!(?:^}))|\S)*)\s*}/gm;
     const REGEX_ACCESSORS = /^[ \t]*(global|public|private)/g;
 
-    const REGEX_CLASS_NODOC = new RegExp(
+    const REGEX_CLASS = new RegExp(
       REGEX_ATTRIBUTES.source +
         REGEX_ACCESSORS.source +
         /\s*([\w\s]*)\s+(class|enum|interface)+\s*([\w]+)\s*((?:extends)* [^\n]*)*\s*{/
           .source,
       "gm"
     );
-    __DBG__("REGEX_CLASS = " + REGEX_CLASS_NODOC);
+    __DBG__("REGEX_CLASS = " + REGEX_CLASS);
 
-    const REGEX_ABSTRACT_METHOD_NODOC = new RegExp(
+    const REGEX_ABSTRACT_METHOD = new RegExp(
       REGEX_ATTRIBUTES.source +
         /(?:\@[^\n]*[\s]+)*^[ \t]*(abstract)[ \t]*(global|public|private)[ \t]*([\w]*)[ \t]+([\w\<\>\[\]\,\. ]*)[ \t]+([\w]+)[ \t]*(\([^\)]*\))\s*(?:{|;)/
           .source,
       "gm"
     );
-    __DBG__("REGEX_ABSTRACT_METHOD = " + REGEX_ABSTRACT_METHOD_NODOC);
+    __DBG__("REGEX_ABSTRACT_METHOD = " + REGEX_ABSTRACT_METHOD);
 
-    const REGEX_METHOD_NODOC = new RegExp(
+    const REGEX_METHOD = new RegExp(
       REGEX_ATTRIBUTES.source +
         REGEX_ACCESSORS.source +
         /[ \t]*([\w]*)[ \t]+([\w\<\>\[\]\,\. ]*)[ \t]+([\w]+)[ \t]*(\([^\)]*\))\s*(?:{|;)/
           .source,
       "gm"
     );
-    __DBG__("REGEX_METHOD = " + REGEX_METHOD_NODOC);
+    __DBG__("REGEX_METHOD = " + REGEX_METHOD);
 
-    const REGEX_CONSTRUCTOR_NODOC = new RegExp(
+    const REGEX_CONSTRUCTOR = new RegExp(
       REGEX_ATTRIBUTES.source +
         REGEX_ACCESSORS.source +
         /[ \t]+([\w]+)[ \t]*(\([^\)]*\))\s*(?:[{])/.source,
       "gm"
     );
-    __DBG__("REGEX_CONSTRUCTOR = " + REGEX_CONSTRUCTOR_NODOC);
+    __DBG__("REGEX_CONSTRUCTOR = " + REGEX_CONSTRUCTOR);
 
-    const REGEX_PROPERTY_NODOC = new RegExp(
+    const REGEX_PROPERTY = new RegExp(
       REGEX_ATTRIBUTES.source +
         REGEX_ACCESSORS.source +
         /\s*(static|final|const)*\s+([\w\s\[\]<>,]+)\s+([\w]+)\s*(?:{\s*get([^}]+)}|(?:=[\w\s\[\]<>,{}'=()]*)|;)+/
           .source,
       "gm"
     );
-    __DBG__("REGEX_PROPERTY = " + REGEX_PROPERTY_NODOC);
+    __DBG__("REGEX_PROPERTY = " + REGEX_PROPERTY);
 
     const ENTITY_TYPE = {
       CLASS: 1,
@@ -98,15 +100,33 @@ module.exports = {
       });
     }
 
+    ///// Camelize /////////////////////////////////////////////////////////////////////////////////////////////////////
+    function camelize(str) {
+      return str.replace(/(?:^\w|[A-Z]|\b\w|\s+)/g, function(match, index) {
+        if (+match === 0) return ""; // or if (/\s+/.test(match)) for white spaces
+        return index === 0 ? match.toLowerCase() : match.toUpperCase();
+      });
+    }
+
     ///// Parse File ///////////////////////////////////////////////////////////////////////////////////////////////////
     function parseFile(text, lang) {
       let fileData = [];
+      let symbolData = [];
       let classData = [];
       let classes = [];
       let allClasses = []; // Includes private and other classes so we can remove them from the parent body
       let i = 0;
 
-      classData = matchAll(text, REGEX_CLASS_NODOC, true);
+      symbolData = matchAll(text, REGEX_SYMBOL, true, 1);
+      symbolData.forEach(function(symbol) {
+        symbols.set(camelize(symbol), (symbols.get(symbol) ?? 0) + 1);
+      });
+
+      symbols.forEach(function(value, key) {
+        __DBG__(`${key} = ${value}`);
+      });
+
+      classData = matchAll(text, REGEX_CLASS, true);
 
       ///// All classes
       classData.forEach(function(data) {
@@ -115,7 +135,7 @@ module.exports = {
       });
 
       ///// Filtered classes (only public and global)
-      classData = filter(classData, lang, undefined, 'classes');
+      classData = filter(classData, lang, undefined, "classes");
       __LOG__("Classes = " + classData.length);
 
       classData.forEach(function(data) {
@@ -150,11 +170,7 @@ module.exports = {
       let classType = target.name.toLowerCase(); // Class, Enum, Interface, etc.
 
       ///// Handle Properties
-      let propertyData = matchAll(
-        target.bodyCodeOnly,
-        REGEX_PROPERTY_NODOC,
-        true
-      );
+      let propertyData = matchAll(target.bodyCodeOnly, REGEX_PROPERTY, true);
       propertyData = filter(propertyData, lang, classType, "properties");
       __LOG__("Properties = " + propertyData.length);
 
@@ -168,7 +184,7 @@ module.exports = {
       ///// Handle Constructors
       let constructorData = matchAll(
         target.bodyCodeOnly,
-        REGEX_CONSTRUCTOR_NODOC,
+        REGEX_CONSTRUCTOR,
         true
       );
       constructorData = filter(constructorData, lang, classType);
@@ -184,7 +200,7 @@ module.exports = {
       ///// Handle Abstract Methods
       let abstractData = matchAll(
         target.bodyCodeOnly,
-        REGEX_ABSTRACT_METHOD_NODOC,
+        REGEX_ABSTRACT_METHOD,
         true
       );
       abstractData = filter(abstractData, lang, classType, "abstracts");
@@ -196,7 +212,7 @@ module.exports = {
       }
 
       ///// Handle Methods
-      let methodData = matchAll(target.bodyCodeOnly, REGEX_METHOD_NODOC, true);
+      let methodData = matchAll(target.bodyCodeOnly, REGEX_METHOD, true);
       methodData = filter(methodData, lang, classType, "methods");
       __LOG__("Methods = " + methodData.length);
 
@@ -496,7 +512,7 @@ module.exports = {
       return ret;
     }
 
-    function matchAll(str, regexp, excludeComments) {
+    function matchAll(str, regexp, excludeComments, captureGroup) {
       let ret = [];
       let result = undefined;
       let i = 0;
@@ -507,7 +523,11 @@ module.exports = {
           result[0].trim().substring(0, 3) === `/**` ||
           !excludeComments
         ) {
-          ret.push(result);
+          if (captureGroup) {
+            ret.push(result[captureGroup]);
+          } else {
+            ret.push(result);
+          }
         }
       }
       return ret;
@@ -528,7 +548,9 @@ module.exports = {
         ) {
           ret.push(target);
         } else {
-          __DBG__(`Filtered out ${target[1]} accessor for entity ${target[4]}.`);
+          __DBG__(
+            `Filtered out ${target[1]} accessor for entity ${target[4]}.`
+          );
         }
       });
       if (ret.length < data.length)
