@@ -1,3 +1,4 @@
+const { camelCase } = require("lodash");
 const { nextTick } = require("process");
 const { string, number } = require("yargs");
 
@@ -7,11 +8,13 @@ module.exports = {
     let isTestClass = false;
     let isDeprecatedClass = false;
     const symbols = new Map();
+    const declarations = new Map();
 
     const CLASS_TYPES = [`Class`, `Interface`];
     const CLASS_AND_ENUM_TYPES = [`Class`, `Interface`, `Enum`];
     const HIDDEN_TAGS = [`@exclude`, `@hidden`];
 
+    const REGEX_TEST = /([A-Z])\w+/g;
     //const REGEX_TYPE_PARAM = /(<+[\w ]*(\,)*[\w ]*>+)*/g;
 
     // Capture group 1 = variable, group 2 = method  String.toLowerCase() 1 = String, 2 = toLowerCase
@@ -24,16 +27,18 @@ module.exports = {
      *         group 5 = Initializer
      *         group 6 = Initializer Type Parameter (optional)
      */
-    const REGEX_DECLARATION = /([a-zA-Z0-9_]+)(<+.*>+)*\s+([a-zA-Z0-9_]+)\s*=\s*(new|\(\1\))*\s*([a-zA-Z0-9_']+)(<+.*>+)*/gm;
+    const REGEX_DECLARATION = /([\w]+)(<+.*>+)*\s+([\w]+)\s*=\s*(new|\(+\1(?:<+.*>+)\))*\s*([\w']+)(<+.*>+)*/gm;
+
+    const REGEX_FOR = /for \(([\w]+)(<+.*>+)* ([\w]+)/g;
 
     /**
      * Capture group 1 = Object or primitive type
      *         group 2 = Type Parameter (optional)
-     *         group 3 = Param name 
+     *         group 3 = Param name
      */
-    const REGEX_PARAM = /([\w ]*(<+[\w ]+\,*[\w ]*>+)*)([\w ]*)/g;
+    const REGEX_PARAM = /([a-zA-Z0-9_]+\s*(?:<+[a-zA-Z0-9_ ]+\,*[a-zA-Z0-9_ ]*>+)*\s*)([a-zA-Z0-9_]*)/g;
 
-    const REGEX_PARAMETER_LIST = /\((([a-zA-Z0-9_]+)\s*(<+.*>+)*\s+([a-zA-Z0-9_,]+\s*))+\)/g;
+    const REGEX_PARAMETER_LIST = /[public|private|protected|global]+ [\w ]*\(([\w<>, )]+)\)/g;
 
     const REGEX_STRING = /([\"'`])(?:[\s\S])*?(?:(?<!\\)\1)/gm;
     const REGEX_COMMENT = /\/\*\*(?:[^\*]|\*(?!\/))*.*?\*\//gm;
@@ -131,13 +136,39 @@ module.exports = {
       });
     }
 
+    function rightPad(str, padding) {
+      let p = '';
+      padding -= str.length;
+      while (padding-- > 0) {
+        p += ' ';
+      }
+      return str + p;
+    }
+
+    function excludedType(str) {
+      if (str.substr(str.length - 3) == '__c') return true;
+      return false;
+    }
+
+    function addDeclaration(token, type) {
+      if (!token |! type) {
+        __DBG__(`*** ${token} : ${type}`);
+        return;
+      }
+      token = toCamelCase(token).trim();
+      type = toTitleCase(type).trim();
+      if (!declarations.get(token)) {
+        __DBG__(`${rightPad(token, 25)} : ${type}`);
+        declarations.set(token, type);
+      }
+    }
+
     ///// Parse File ///////////////////////////////////////////////////////////////////////////////////////////////////
     function parseFile(text, lang) {
       let fileData = [];
       let symbolData = [];
       let declarationData = [];
       let paramsData = [];
-      let declarations = new Map();
       let classData = [];
       let classes = [];
       let allClasses = []; // Includes private and other classes so we can remove them from the parent body
@@ -145,34 +176,36 @@ module.exports = {
 
       declarationData = matchAll(text, REGEX_DECLARATION, true);
       declarationData.forEach(function(data) {
-        declarations.set(
-          toCamelCase(data[3]),
-          "D__" + data[1] + (data[2] ?? "")
-        );
+        addDeclaration(data[3], data[1] + (data[2] ?? ""));
       });
+
+      __DBG__('');
+
+      declarationData = matchAll(text, REGEX_FOR, true);
+      declarationData.forEach(function(data) {
+        addDeclaration(data[3], data[1] + (data[2] ?? ""));
+      });
+
+      __DBG__('');
+
       paramsData = matchAll(text, REGEX_PARAMETER_LIST, true);
       paramsData.forEach(function(data) {
-        let str = data[1].toString();
-        __DBG__('paramsData row = ' + str);
-        let params = matchAll(str, REGEX_PARAM, true);
+        let params = matchAll(data[1], REGEX_PARAM, true);
         params.forEach(function(param) {
-          __DBG__('param entity = ' + param[0]);
-          declarations.set(
-            toCamelCase(param[3], toTitleCase("_P_" + param[1]))
-          );
+          addDeclaration(param[2], param[1]);
         });
       });
 
-      declarations.forEach(function(value, key) {
-        __DBG__(`${key} is ${value}`);
-      });
+      __DBG__('');
 
       symbolData = matchAll(text, REGEX_SYMBOL, true);
       symbolData.forEach(function(data) {
         let v = toCamelCase(data[1]);
-        let type = declarations.get(v) ?? "**" + v;
-        let token = toTitleCase(type) + "." + toCamelCase(data[2]);
-        symbols.set(token, (symbols.get(token) ?? 0) + 1);
+        let type = declarations.get(v) ?? "  **  " + v;
+        if (!excludedType(type)) {
+          let token = toTitleCase(type) + "." + toCamelCase(data[2]);
+          symbols.set(token, (symbols.get(token) ?? 0) + 1);
+        }
       });
 
       symbols.forEach(function(value, key) {
@@ -580,7 +613,7 @@ module.exports = {
         }
       }
       if (i == 1000) {
-        throw new Error('BOOM!\n' + ret[0] + '\n' + ret[1]);
+        throw new Error("BOOM!\n" + ret[0] + "\n" + ret[1]);
       }
       return ret;
     }
