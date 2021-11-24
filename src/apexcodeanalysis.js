@@ -1,4 +1,5 @@
 const { nextTick } = require("process");
+const { string, number } = require("yargs");
 
 module.exports = {
   generate: function generate(optionsArg) {
@@ -11,7 +12,28 @@ module.exports = {
     const CLASS_AND_ENUM_TYPES = [`Class`, `Interface`, `Enum`];
     const HIDDEN_TAGS = [`@exclude`, `@hidden`];
 
-    const REGEX_SYMBOL = /\.([a-zA-Z0-9]+)\(/g;
+    //const REGEX_TYPE_PARAM = /(<+[\w ]*(\,)*[\w ]*>+)*/g;
+
+    // Capture group 1 = variable, group 2 = method  String.toLowerCase() 1 = String, 2 = toLowerCase
+    const REGEX_SYMBOL = /([a-zA-Z0-9_]+)\.([a-zA-Z0-9_]+)\(/g;
+    /**
+     * Capture group 1 = Object or primitive type
+     *         group 2 = Type Parameter (optional)
+     *         group 3 = Variable name
+     *         group 4 = new or Cast
+     *         group 5 = Initializer
+     *         group 6 = Initializer Type Parameter (optional)
+     */
+    const REGEX_DECLARATION = /([a-zA-Z0-9_]+)(<+.*>+)*\s+([a-zA-Z0-9_]+)\s*=\s*(new|\(\1\))*\s*([a-zA-Z0-9_']+)(<+.*>+)*/gm;
+
+    /**
+     * Capture group 1 = Object or primitive type
+     *         group 2 = Type Parameter (optional)
+     *         group 3 = Param name 
+     */
+    const REGEX_PARAM = /([\w ]*(<+[\w ]+\,*[\w ]*>+)*)([\w ]*)/g;
+
+    const REGEX_PARAMETER_LIST = /\((([a-zA-Z0-9_]+)\s*(<+.*>+)*\s+([a-zA-Z0-9_,]+\s*))+\)/g;
 
     const REGEX_STRING = /([\"'`])(?:[\s\S])*?(?:(?<!\\)\1)/gm;
     const REGEX_COMMENT = /\/\*\*(?:[^\*]|\*(?!\/))*.*?\*\//gm;
@@ -26,7 +48,6 @@ module.exports = {
           .source,
       "gm"
     );
-    __DBG__("REGEX_CLASS = " + REGEX_CLASS);
 
     const REGEX_ABSTRACT_METHOD = new RegExp(
       REGEX_ATTRIBUTES.source +
@@ -34,7 +55,6 @@ module.exports = {
           .source,
       "gm"
     );
-    __DBG__("REGEX_ABSTRACT_METHOD = " + REGEX_ABSTRACT_METHOD);
 
     const REGEX_METHOD = new RegExp(
       REGEX_ATTRIBUTES.source +
@@ -43,7 +63,6 @@ module.exports = {
           .source,
       "gm"
     );
-    __DBG__("REGEX_METHOD = " + REGEX_METHOD);
 
     const REGEX_CONSTRUCTOR = new RegExp(
       REGEX_ATTRIBUTES.source +
@@ -51,7 +70,6 @@ module.exports = {
         /[ \t]+([\w]+)[ \t]*(\([^\)]*\))\s*(?:[{])/.source,
       "gm"
     );
-    __DBG__("REGEX_CONSTRUCTOR = " + REGEX_CONSTRUCTOR);
 
     const REGEX_PROPERTY = new RegExp(
       REGEX_ATTRIBUTES.source +
@@ -60,7 +78,6 @@ module.exports = {
           .source,
       "gm"
     );
-    __DBG__("REGEX_PROPERTY = " + REGEX_PROPERTY);
 
     const ENTITY_TYPE = {
       CLASS: 1,
@@ -100,11 +117,17 @@ module.exports = {
       });
     }
 
-    ///// Camelize /////////////////////////////////////////////////////////////////////////////////////////////////////
-    function camelize(str) {
+    function toCamelCase(str) {
+      if (!str) return str;
       return str.replace(/(?:^\w|[A-Z]|\b\w|\s+)/g, function(match, index) {
         if (+match === 0) return ""; // or if (/\s+/.test(match)) for white spaces
         return index === 0 ? match.toLowerCase() : match.toUpperCase();
+      });
+    }
+
+    function toTitleCase(str) {
+      return str.replace(/\w\S*/g, function(txt) {
+        return txt.charAt(0).toUpperCase() + txt.substr(1).toLowerCase();
       });
     }
 
@@ -112,18 +135,48 @@ module.exports = {
     function parseFile(text, lang) {
       let fileData = [];
       let symbolData = [];
+      let declarationData = [];
+      let paramsData = [];
+      let declarations = new Map();
       let classData = [];
       let classes = [];
       let allClasses = []; // Includes private and other classes so we can remove them from the parent body
       let i = 0;
 
-      symbolData = matchAll(text, REGEX_SYMBOL, true, 1);
-      symbolData.forEach(function(symbol) {
-        symbols.set(camelize(symbol), (symbols.get(symbol) ?? 0) + 1);
+      declarationData = matchAll(text, REGEX_DECLARATION, true);
+      declarationData.forEach(function(data) {
+        declarations.set(
+          toCamelCase(data[3]),
+          "D__" + data[1] + (data[2] ?? "")
+        );
+      });
+      paramsData = matchAll(text, REGEX_PARAMETER_LIST, true);
+      paramsData.forEach(function(data) {
+        let str = data[1].toString();
+        __DBG__('paramsData row = ' + str);
+        let params = matchAll(str, REGEX_PARAM, true);
+        params.forEach(function(param) {
+          __DBG__('param entity = ' + param[0]);
+          declarations.set(
+            toCamelCase(param[3], toTitleCase("_P_" + param[1]))
+          );
+        });
+      });
+
+      declarations.forEach(function(value, key) {
+        __DBG__(`${key} is ${value}`);
+      });
+
+      symbolData = matchAll(text, REGEX_SYMBOL, true);
+      symbolData.forEach(function(data) {
+        let v = toCamelCase(data[1]);
+        let type = declarations.get(v) ?? "**" + v;
+        let token = toTitleCase(type) + "." + toCamelCase(data[2]);
+        symbols.set(token, (symbols.get(token) ?? 0) + 1);
       });
 
       symbols.forEach(function(value, key) {
-        __DBG__(`${key} = ${value}`);
+        __DBG__(`${key}, refs ${value}`);
       });
 
       classData = matchAll(text, REGEX_CLASS, true);
@@ -512,23 +565,22 @@ module.exports = {
       return ret;
     }
 
-    function matchAll(str, regexp, excludeComments, captureGroup) {
+    function matchAll(str, regexp, excludeComments) {
       let ret = [];
       let result = undefined;
       let i = 0;
       let noComments = str.replace(REGEX_COMMENT, ``).replace(/\/\/.*/g, ``);
-      while ((result = regexp.exec(str))) {
+      while ((result = regexp.exec(str)) && ++i < 1000) {
         if (
           noComments.includes(result[0]) ||
           result[0].trim().substring(0, 3) === `/**` ||
           !excludeComments
         ) {
-          if (captureGroup) {
-            ret.push(result[captureGroup]);
-          } else {
-            ret.push(result);
-          }
+          ret.push(result);
         }
+      }
+      if (i == 1000) {
+        throw new Error('BOOM!\n' + ret[0] + '\n' + ret[1]);
       }
       return ret;
     }
@@ -855,3 +907,9 @@ module.exports = {
     }
   }
 };
+
+function Symbol(parent, token, refs) {
+  this.parent = parent;
+  this.token = token;
+  this.refs = refs;
+}
