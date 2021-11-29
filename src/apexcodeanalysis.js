@@ -11,8 +11,23 @@ module.exports = {
     const declarations = new Map();
 
     const CLASS_TYPES = [`Class`, `Interface`];
-    const CLASS_AND_ENUM_TYPES = [`Class`, `Interface`, `Enum`];
+    const CLASS_AND_ENUM_TYPES = [`Class`, `Interface`, `Enum`, `System`, `Database`];
     const HIDDEN_TAGS = [`@exclude`, `@hidden`];
+    const EXCLUDED_TYPES = [
+      `String`,
+      `System`,
+      `Boolean`,
+      `Sobject`,
+      `Object`,
+      `Httprequest`,
+      `Httpresponse`,
+      `Integer`,
+      `Double`,
+      `Json`,
+      `Test`,
+      `Database`,
+      `Schema`
+    ];
 
     const REGEX_TEST = /([A-Z])\w+/g;
     //const REGEX_TYPE_PARAM = /(<+[\w ]*(\,)*[\w ]*>+)*/g;
@@ -27,7 +42,7 @@ module.exports = {
      *         group 5 = Initializer
      *         group 6 = Initializer Type Parameter (optional)
      */
-    const REGEX_DECLARATION = /([\w]+)(<+.*>+)*\s+([\w]+)\s*=\s*(new|\(+\1(?:<+.*>+)\))*\s*([\w']+)(<+.*>+)*/gm;
+    const REGEX_DECLARATION = /([\w]+) *(<+.*>+)*[ \t]+([\w]+)\s*=\s*(new|\(+\1(?:<+.*>+)*\))*\s*([\w']+)(<+.*>+)*/gm;
 
     const REGEX_FOR = /for \(([\w]+)(<+.*>+)* ([\w]+)/g;
 
@@ -137,21 +152,26 @@ module.exports = {
     }
 
     function rightPad(str, padding) {
-      let p = '';
+      let p = "";
       padding -= str.length;
       while (padding-- > 0) {
-        p += ' ';
+        p += " ";
       }
       return str + p;
     }
 
     function excludedType(str) {
-      if (str.substr(str.length - 3) == '__c') return true;
+      if (!str) return true;
+      str = toTitleCase(str).trim();
+      if (str.substr(str.length - 3) == "__c") return true;
+      if (str.substr(0,4) == "Map<") return true;
+      if (str.substr(0,5) == "List<") return true;
+      if (EXCLUDED_TYPES.includes(str)) return true;
       return false;
     }
 
     function addDeclaration(token, type) {
-      if (!token |! type) {
+      if (!token | !type) {
         __DBG__(`*** ${token} : ${type}`);
         return;
       }
@@ -179,14 +199,14 @@ module.exports = {
         addDeclaration(data[3], data[1] + (data[2] ?? ""));
       });
 
-      __DBG__('');
+      __DBG__("");
 
       declarationData = matchAll(text, REGEX_FOR, true);
       declarationData.forEach(function(data) {
         addDeclaration(data[3], data[1] + (data[2] ?? ""));
       });
 
-      __DBG__('');
+      __DBG__("");
 
       paramsData = matchAll(text, REGEX_PARAMETER_LIST, true);
       paramsData.forEach(function(data) {
@@ -196,12 +216,12 @@ module.exports = {
         });
       });
 
-      __DBG__('');
+      __DBG__("");
 
       symbolData = matchAll(text, REGEX_SYMBOL, true);
       symbolData.forEach(function(data) {
         let v = toCamelCase(data[1]);
-        let type = declarations.get(v) ?? "  **  " + v;
+        let type = declarations.get(v) ?? v;
         if (!excludedType(type)) {
           let token = toTitleCase(type) + "." + toCamelCase(data[2]);
           symbols.set(token, (symbols.get(token) ?? 0) + 1);
