@@ -1,4 +1,5 @@
-const { camelCase } = require("lodash");
+const _ = require("lodash");
+const { camelCase, forEach } = require("lodash");
 const { nextTick } = require("process");
 const { string, number } = require("yargs");
 
@@ -9,9 +10,16 @@ module.exports = {
     let isDeprecatedClass = false;
     const symbols = new Map();
     const declarations = new Map();
+    const classMembers = new Map();
 
     const CLASS_TYPES = [`Class`, `Interface`];
-    const CLASS_AND_ENUM_TYPES = [`Class`, `Interface`, `Enum`, `System`, `Database`];
+    const CLASS_AND_ENUM_TYPES = [
+      `Class`,
+      `Interface`,
+      `Enum`,
+      `System`,
+      `Database`
+    ];
     const HIDDEN_TAGS = [`@exclude`, `@hidden`];
     const EXCLUDED_TYPES = [
       `String`,
@@ -83,6 +91,8 @@ module.exports = {
           .source,
       "gm"
     );
+
+    __DBG__(REGEX_METHOD.source);
 
     const REGEX_CONSTRUCTOR = new RegExp(
       REGEX_ATTRIBUTES.source +
@@ -164,8 +174,8 @@ module.exports = {
       if (!str) return true;
       str = toTitleCase(str).trim();
       if (str.substr(str.length - 3) == "__c") return true;
-      if (str.substr(0,4) == "Map<") return true;
-      if (str.substr(0,5) == "List<") return true;
+      if (str.substr(0, 4) == "Map<") return true;
+      if (str.substr(0, 5) == "List<") return true;
       if (EXCLUDED_TYPES.includes(str)) return true;
       return false;
     }
@@ -183,54 +193,32 @@ module.exports = {
       }
     }
 
+    function addMember(apexClass, member) {
+      if (!apexClass | !member) {
+        __DBG__(`Member = ${apexClass} : ${member}`);
+        return;
+      }
+      apexClass = toCamelCase(apexClass).trim();
+      member = toTitleCase(member).trim();
+      __DBG__(`${rightPad(apexClass, 25)} : ${member}`);
+      if (!classMembers.get(apexClass)) {
+        classMembers.set(apexClass, [member]);
+      } else {
+        classMembers.get(apexClass).push(member);
+      }
+    }
+
     ///// Parse File ///////////////////////////////////////////////////////////////////////////////////////////////////
     function parseFile(text, lang) {
       let fileData = [];
       let symbolData = [];
       let declarationData = [];
       let paramsData = [];
+      let internalData = [];
       let classData = [];
       let classes = [];
       let allClasses = []; // Includes private and other classes so we can remove them from the parent body
       let i = 0;
-
-      declarationData = matchAll(text, REGEX_DECLARATION, true);
-      declarationData.forEach(function(data) {
-        addDeclaration(data[3], data[1] + (data[2] ?? ""));
-      });
-
-      __DBG__("");
-
-      declarationData = matchAll(text, REGEX_FOR, true);
-      declarationData.forEach(function(data) {
-        addDeclaration(data[3], data[1] + (data[2] ?? ""));
-      });
-
-      __DBG__("");
-
-      paramsData = matchAll(text, REGEX_PARAMETER_LIST, true);
-      paramsData.forEach(function(data) {
-        let params = matchAll(data[1], REGEX_PARAM, true);
-        params.forEach(function(param) {
-          addDeclaration(param[2], param[1]);
-        });
-      });
-
-      __DBG__("");
-
-      symbolData = matchAll(text, REGEX_SYMBOL, true);
-      symbolData.forEach(function(data) {
-        let v = toCamelCase(data[1]);
-        let type = declarations.get(v) ?? v;
-        if (!excludedType(type)) {
-          let token = toTitleCase(type) + "." + toCamelCase(data[2]);
-          symbols.set(token, (symbols.get(token) ?? 0) + 1);
-        }
-      });
-
-      symbols.forEach(function(value, key) {
-        __DBG__(`${key}, refs ${value}`);
-      });
 
       classData = matchAll(text, REGEX_CLASS, true);
 
@@ -264,7 +252,71 @@ module.exports = {
         }
         let members = parseClass(classes[i], lang);
         if (members !== undefined) fileData = fileData.concat(members);
+
+        __DBG__(members.length);
+
+        members.forEach(function(m) {
+          addMember(classes[i].path, m[0].toc.substr(0, m[0].toc.indexOf("(")));
+        });
+
         i++;
+      });
+
+      ///// Symbols & References
+
+      __DBG__("\n\nStandard Declarations:");
+      declarationData = matchAll(text, REGEX_DECLARATION, true);
+      declarationData.forEach(function(data) {
+        addDeclaration(data[3], data[1] + (data[2] ?? ""));
+      });
+
+      __DBG__("\n\nFor Loop Declarations:");
+      declarationData = matchAll(text, REGEX_FOR, true);
+      declarationData.forEach(function(data) {
+        addDeclaration(data[3], data[1] + (data[2] ?? ""));
+      });
+
+      __DBG__("\n\nParam Declarations:");
+      paramsData = matchAll(text, REGEX_PARAMETER_LIST, true);
+      paramsData.forEach(function(data) {
+        let params = matchAll(data[1], REGEX_PARAM, true);
+        params.forEach(function(param) {
+          addDeclaration(param[2], param[1]);
+        });
+      });
+
+      __DBG__("\n\nInternal References:");
+      classes.forEach(function(c) {
+        let apexClass = toCamelCase(c.path);
+        __DBG__("Class: " + apexClass);
+        classMembers.get(apexClass).forEach(function(token) {
+          let methodCall = RegExp("\^[ \\t\\w]*(" + token + ")+\\s*\\(.*\\)\\s*{*", "gim");
+          let refs = matchAll(text, methodCall, true);
+          let symbol = apexClass + "." + token;
+          refs.forEach(function(r) {
+            // Skip method declartions, otherwise increment ref count
+            r[0] = r[0].replace('\n', '');
+            if (!r[0].match(REGEX_METHOD)) {
+              __DBG__('r = ' + JSON.stringify(r));
+              symbols.set(symbol, (symbols.get(symbol) ?? 0) + 1);
+            }
+          });
+        });
+      });
+
+      __DBG__("\n\nCustom Code References:");
+      symbolData = matchAll(text, REGEX_SYMBOL, true);
+      symbolData.forEach(function(data) {
+        let v = toCamelCase(data[1]);
+        let type = declarations.get(v) ?? v;
+        if (!excludedType(type)) {
+          let token = toTitleCase(type) + "." + toCamelCase(data[2]);
+          symbols.set(token, (symbols.get(token) ?? 0) + 1);
+        }
+      });
+
+      symbols.forEach(function(value, key) {
+        __DBG__(`${key}, refs ${value}`);
       });
 
       return fileData;
