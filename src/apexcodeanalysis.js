@@ -37,11 +37,11 @@ module.exports = {
       `Schema`
     ];
 
-    const REGEX_TEST = /([A-Z])\w+/g;
+    const REGEX_TEST = /([A-Z])\w+/gi;
     //const REGEX_TYPE_PARAM = /(<+[\w ]*(\,)*[\w ]*>+)*/g;
 
     // Capture group 1 = variable, group 2 = method  String.toLowerCase() 1 = String, 2 = toLowerCase
-    const REGEX_SYMBOL = /([a-zA-Z0-9_]+)\.([a-zA-Z0-9_]+)\(/g;
+    const REGEX_SYMBOL = /([a-zA-Z0-9_]+)\.([a-zA-Z0-9_]+)\(/gi;
     /**
      * Capture group 1 = Object or primitive type
      *         group 2 = Type Parameter (optional)
@@ -50,38 +50,38 @@ module.exports = {
      *         group 5 = Initializer
      *         group 6 = Initializer Type Parameter (optional)
      */
-    const REGEX_DECLARATION = /([\w]+) *(<+.*>+)*[ \t]+([\w]+)\s*=\s*(new|\(+\1(?:<+.*>+)*\))*\s*([\w']+)(<+.*>+)*/gm;
+    const REGEX_DECLARATION = /([\w]+) *(<+.*>+)*[ \t]+([\w]+)\s*=\s*(new|\(+\1(?:<+.*>+)*\))*\s*([\w']+)(<+.*>+)*/gmi;
 
-    const REGEX_FOR = /for \(([\w]+)(<+.*>+)* ([\w]+)/g;
+    const REGEX_FOR = /for \(([\w]+)(<+.*>+)* ([\w]+)/gi;
 
     /**
      * Capture group 1 = Object or primitive type
      *         group 2 = Type Parameter (optional)
      *         group 3 = Param name
      */
-    const REGEX_PARAM = /([a-zA-Z0-9_]+\s*(?:<+[a-zA-Z0-9_ ]+\,*[a-zA-Z0-9_ ]*>+)*\s*)([a-zA-Z0-9_]*)/g;
+    const REGEX_PARAM = /([a-zA-Z0-9_]+\s*(?:<+[a-zA-Z0-9_ ]+\,*[a-zA-Z0-9_ ]*>+)*\s*)([a-zA-Z0-9_]*)/gi;
 
-    const REGEX_PARAMETER_LIST = /[public|private|protected|global]+ [\w ]*\(([\w<>, )]+)\)/g;
+    const REGEX_PARAMETER_LIST = /[public|private|protected|global]+ [\w ]*\(([\w<>, )]+)\)/gi;
 
-    const REGEX_STRING = /([\"'`])(?:[\s\S])*?(?:(?<!\\)\1)/gm;
-    const REGEX_COMMENT = /\/\*\*(?:[^\*]|\*(?!\/))*.*?\*\//gm;
-    const REGEX_ATTRIBUTES = /(?:\@[^\n]*[\s]+)*/gm;
-    const REGEX_COMMENT_CODE_BLOCK = /{@code((?:\s(?!(?:^}))|\S)*)\s*}/gm;
-    const REGEX_ACCESSORS = /^[ \t]*(global|public|private)/g;
+    const REGEX_STRING = /([\"'`])(?:[\s\S])*?(?:(?<!\\)\1)/gmi;
+    const REGEX_COMMENT = /\/\*\*(?:[^\*]|\*(?!\/))*.*?\*\//gmi;
+    const REGEX_ATTRIBUTES = /(?:\@[^\n]*[\s]+)*/gmi;
+    const REGEX_COMMENT_CODE_BLOCK = /{@code((?:\s(?!(?:^}))|\S)*)\s*}/gmi;
+    const REGEX_ACCESSORS = /^[ \t]*(global|public|private)/gi;
 
     const REGEX_CLASS = new RegExp(
       REGEX_ATTRIBUTES.source +
         REGEX_ACCESSORS.source +
         /\s*([\w\s]*)\s+(class|enum|interface)+\s*([\w]+)\s*((?:extends)* [^\n]*)*\s*{/
           .source,
-      "gm"
+      "gmi"
     );
 
     const REGEX_ABSTRACT_METHOD = new RegExp(
       REGEX_ATTRIBUTES.source +
         /(?:\@[^\n]*[\s]+)*^[ \t]*(abstract)[ \t]*(global|public|private)[ \t]*([\w]*)[ \t]+([\w\<\>\[\]\,\. ]*)[ \t]+([\w]+)[ \t]*(\([^\)]*\))\s*(?:{|;)/
           .source,
-      "gm"
+      "gmi"
     );
 
     const REGEX_METHOD = new RegExp(
@@ -89,7 +89,7 @@ module.exports = {
         REGEX_ACCESSORS.source +
         /[ \t]*([\w]*)[ \t]+([\w\<\>\[\]\,\. ]*)[ \t]+([\w]+)[ \t]*(\([^\)]*\))\s*(?:{|;)/
           .source,
-      "gm"
+      "gmi"
     );
 
     __DBG__(REGEX_METHOD.source);
@@ -98,7 +98,7 @@ module.exports = {
       REGEX_ATTRIBUTES.source +
         REGEX_ACCESSORS.source +
         /[ \t]+([\w]+)[ \t]*(\([^\)]*\))\s*(?:[{])/.source,
-      "gm"
+      "gmi"
     );
 
     const REGEX_PROPERTY = new RegExp(
@@ -106,7 +106,7 @@ module.exports = {
         REGEX_ACCESSORS.source +
         /\s*(static|final|const)*\s+([\w\s\[\]<>,]+)\s+([\w]+)\s*(?:{\s*get([^}]+)}|(?:=[\w\s\[\]<>,{}'=()]*)|;)+/
           .source,
-      "gm"
+      "gmi"
     );
 
     const ENTITY_TYPE = {
@@ -198,8 +198,8 @@ module.exports = {
         __DBG__(`Member = ${apexClass} : ${member}`);
         return;
       }
-      apexClass = toCamelCase(apexClass).trim();
-      member = toTitleCase(member).trim();
+      apexClass = toTitleCase(apexClass).trim();
+      member = toCamelCase(member).trim();
       __DBG__(`${rightPad(apexClass, 25)} : ${member}`);
       if (!classMembers.get(apexClass)) {
         classMembers.set(apexClass, [member]);
@@ -287,7 +287,7 @@ module.exports = {
 
       __DBG__("\n\nInternal References:");
       classes.forEach(function(c) {
-        let apexClass = toCamelCase(c.path);
+        let apexClass = toTitleCase(c.path).trim();
         __DBG__("Class: " + apexClass);
         classMembers.get(apexClass).forEach(function(token) {
           let methodCall = RegExp("\^[ \\t\\w]*(" + token + ")+\\s*\\(.*\\)\\s*{*", "gim");
