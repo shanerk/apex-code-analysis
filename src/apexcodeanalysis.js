@@ -34,7 +34,8 @@ module.exports = {
       `Json`,
       `Test`,
       `Database`,
-      `Schema`
+      `Schema`,
+      `Fields`
     ];
 
     const REGEX_TEST = /([A-Z])\w+/gi;
@@ -50,7 +51,7 @@ module.exports = {
      *         group 5 = Initializer
      *         group 6 = Initializer Type Parameter (optional)
      */
-    const REGEX_DECLARATION = /([\w]+) *(<+.*>+)*[ \t]+([\w]+)\s*=\s*(new|\(+\1(?:<+.*>+)*\))*\s*([\w']+)(<+.*>+)*/gmi;
+    const REGEX_DECLARATION = /([\w]+) *(<+.*>+)*[ \t]+([\w]+)\s*=\s*(new|\(+\1(?:<+.*>+)*\))*\s*([\w']+)(<+.*>+)*/gim;
 
     const REGEX_FOR = /for \(([\w]+)(<+.*>+)* ([\w]+)/gi;
 
@@ -63,10 +64,10 @@ module.exports = {
 
     const REGEX_PARAMETER_LIST = /[public|private|protected|global]+ [\w ]*\(([\w<>, )]+)\)/gi;
 
-    const REGEX_STRING = /([\"'`])(?:[\s\S])*?(?:(?<!\\)\1)/gmi;
-    const REGEX_COMMENT = /\/\*\*(?:[^\*]|\*(?!\/))*.*?\*\//gmi;
-    const REGEX_ATTRIBUTES = /(?:\@[^\n]*[\s]+)*/gmi;
-    const REGEX_COMMENT_CODE_BLOCK = /{@code((?:\s(?!(?:^}))|\S)*)\s*}/gmi;
+    const REGEX_STRING = /([\"'`])(?:[\s\S])*?(?:(?<!\\)\1)/gim;
+    const REGEX_COMMENT = /\/\*\*(?:[^\*]|\*(?!\/))*.*?\*\//gim;
+    const REGEX_ATTRIBUTES = /(?:\@[^\n]*[\s]+)*/gim;
+    const REGEX_COMMENT_CODE_BLOCK = /{@code((?:\s(?!(?:^}))|\S)*)\s*}/gim;
     const REGEX_ACCESSORS = /^[ \t]*(global|public|private)/gi;
 
     const REGEX_CLASS = new RegExp(
@@ -200,12 +201,14 @@ module.exports = {
       }
       apexClass = toTitleCase(apexClass).trim();
       member = toCamelCase(member).trim();
+      let symbol = apexClass + "." + member;
       __DBG__(`${rightPad(apexClass, 25)} : ${member}`);
       if (!classMembers.get(apexClass)) {
         classMembers.set(apexClass, [member]);
       } else {
         classMembers.get(apexClass).push(member);
       }
+      symbols.set(symbol, (symbols.get(symbol) ?? 0) + 0);
     }
 
     ///// Parse File ///////////////////////////////////////////////////////////////////////////////////////////////////
@@ -235,7 +238,6 @@ module.exports = {
       classData.forEach(function(data) {
         let c = getClass(data);
         classes.push(c);
-        // TODO: Push to  global classes
       });
 
       classes = setClassBodyCodeOnly(allClasses);
@@ -252,8 +254,6 @@ module.exports = {
         }
         let members = parseClass(classes[i], lang);
         if (members !== undefined) fileData = fileData.concat(members);
-
-        __DBG__(members.length);
 
         members.forEach(function(m) {
           addMember(classes[i].path, m[0].toc.substr(0, m[0].toc.indexOf("(")));
@@ -288,17 +288,23 @@ module.exports = {
       __DBG__("\n\nInternal References:");
       classes.forEach(function(c) {
         let apexClass = toTitleCase(c.path).trim();
-        __DBG__("Class: " + apexClass);
-        classMembers.get(apexClass).forEach(function(token) {
-          let methodCall = RegExp("\^[ \\t\\w]*(" + token + ")+\\s*\\(.*\\)\\s*{*", "gim");
+        classMembers.get(apexClass).forEach(function(method) {
+          let methodCall = RegExp(
+            "^[ \\t\\w<>=,]*(" + method + ")+\\s*\\(.*\\)\\s*{*",
+            "gim"
+          );
           let refs = matchAll(text, methodCall, true);
-          let symbol = apexClass + "." + token;
+          let symbol = apexClass + "." + method;
           refs.forEach(function(r) {
             // Skip method declartions, otherwise increment ref count
-            r[0] = r[0].replace('\n', '');
+            r[0] = r[0].replace("\n", "");
+            __DBG__(r[0]);
             if (!r[0].match(REGEX_METHOD)) {
-              __DBG__('r = ' + JSON.stringify(r));
+              __DBG__(r[1]);
               symbols.set(symbol, (symbols.get(symbol) ?? 0) + 1);
+            } else {
+              __DBG__('***' + r[1]);
+              //symbols.set(symbol, (symbols.get(symbol) ?? 0) + 0);
             }
           });
         });
@@ -316,7 +322,7 @@ module.exports = {
       });
 
       symbols.forEach(function(value, key) {
-        __DBG__(`${key}, refs ${value}`);
+        __LOG__(`${key}, refs ${value}`);
       });
 
       return fileData;
