@@ -9,6 +9,7 @@ module.exports = {
     let isTestClass = false;
     let isDeprecatedClass = false;
     const symbols = new Map();
+    const symbolsFileList = new Map();
     const declarations = new Map();
     const classMembers = new Map();
 
@@ -22,6 +23,7 @@ module.exports = {
     ];
     const HIDDEN_TAGS = [`@exclude`, `@hidden`];
     const EXCLUDED_TYPES = [
+      `Asyncapexjob`,
       `Blob`,
       `Boolean`,
       `Crypto`,
@@ -29,38 +31,57 @@ module.exports = {
       `Date`,
       `Datetime`,
       `Decimal`,
+      `Deploycontainer`,
+      `Describefieldresult`,
       `Double`,
+      `Emailfileattachment`,
       `Exception`,
+      `Featuremanagement`,
       `Fields`,
       `Httprequest`,
       `Httpresponse`,
+      `Id`,
       `Integer`,
       `Json`,
       `Limits`,
       `Matcher`,
       `Math`,
+      `Messaging`,
       `Metadata`,
-      `Metadataservice`
+      `Metadataservice`,
       `Object`,
       `Pagereference`,
       `Pattern`,
+      `Permissionset`,
       `Recordtypeinfo`,
+      `Recordtype`,
       `Schema`,
+      `Schema.sobjectfield`,
+      `Schema.sobjecttype`,
+      `Singleemailmessage`,
       `Sobject`,
       `Sobjecttype`,
       `String`,
       `System`,
       `Test`,
-      `Time`
+      `Time`,
       `Triggernew`,
       `Triggerold`,
+      `Type`,
+      `Url`,
       `Userinfo`,
     ];
+
+    let ExcludedTypesArrays = [];
+
+    EXCLUDED_TYPES.forEach(function(t) {
+      ExcludedTypesArrays.push(`${t}[]`);
+    });
 
     const REGEX_TEST = /([A-Z])\w+/gi;
     //const REGEX_TYPE_PARAM = /(<+[\w ]*(\,)*[\w ]*>+)*/g;
 
-    // Capture group 1 = variable, group 2 = method  String.toLowerCase() 1 = String, 2 = toLowerCase
+    // Capture group 1 = object path, group 2 = method  String.toLowerCase() 1 = String, 2 = toLowerCase
     const REGEX_SYMBOL = /([a-zA-Z0-9_]+)\.([a-zA-Z0-9_]+)\(/gi;
     /**
      * Capture group 1 = Object or primitive type
@@ -70,9 +91,9 @@ module.exports = {
      *         group 5 = Initializer
      *         group 6 = Initializer Type Parameter (optional)
      */
-    const REGEX_DECLARATION = /([\w]+) *(<+.*>+)*[ \t]+([\w]+)\s*=\s*(new|\(+\1(?:<+.*>+)*\))*\s*([\w']+)(<+.*>+)*/gim;
+    const REGEX_DECLARATION = /([\w\[\]]+) *(<+.*>+)*[ \t]+([\w]+)\s*(?:=\s*(\[|new|\(+\1(?:<+.*>+)*\))*\s*([\w']+)(<+.*>+)*|;)/gim;
 
-    const REGEX_FOR = /for \(([\w]+)(<+.*>+)* ([\w]+)/gi;
+    const REGEX_FOR = /(?:for|catch)\s*\(([\w\.]+)(<+.*>+)* ([\w]+)/gi;
 
     /**
      * Capture group 1 = Object or primitive type
@@ -81,7 +102,7 @@ module.exports = {
      */
     const REGEX_PARAM = /([a-zA-Z0-9_]+\s*(?:<+[a-zA-Z0-9_ ]+\,*[a-zA-Z0-9_ ]*>+)*\s*)([a-zA-Z0-9_]*)/gi;
 
-    const REGEX_PARAMETER_LIST = /[public|private|protected|global]+ [\w ]*\(([\w<>, )]+)\)/gi;
+    const REGEX_PARAMETER_LIST = /[public|private|protected|global]+ [\w<>, \[\]]*\(([\w<>, )]+)\)/gi;
 
     const REGEX_STRING = /([\"'`])(?:[\s\S])*?(?:(?<!\\)\1)/gim;
     const REGEX_COMMENT = /\/\*\*(?:[^\*]|\*(?!\/))*.*?\*\//gim;
@@ -192,10 +213,16 @@ module.exports = {
       if (!str) return true;
       str = toTitleCase(str).trim();
       if (str.substr(str.length - 3) == "__c") return true;
+      if (str.substr(str.length - 3) == "__r") return true;
+      if (str.substr(str.length - 5) == "__mdt") return true;
+      if (str.substr(str.length - 5) == "__c[]") return true;
+      if (str.substr(str.length - 5) == "__r[]") return true;
       if (str.substr(0, 4) == "Map<") return true;
       if (str.substr(0, 4) == "Set<") return true;
       if (str.substr(0, 5) == "List<") return true;
+      if (str == `[]`) return true;
       if (EXCLUDED_TYPES.includes(str)) return true;
+      if (ExcludedTypesArrays.includes(str)) return true;
       return false;
     }
 
@@ -212,7 +239,7 @@ module.exports = {
       }
     }
 
-    function addMember(apexClass, member) {
+    function addMember(apexClass, member, fileName) {
       if (!apexClass | !member) {
         //__DBG__(`Member = ${apexClass} : ${member}`);
         return;
@@ -227,10 +254,34 @@ module.exports = {
         classMembers.get(apexClass).push(member);
       }
       symbols.set(symbol, (symbols.get(symbol) ?? 0) + 0);
+      addFileToSymbol(symbol, fileName);
+    }
+
+    function addFileToSymbol(symbol, fileName) {
+      let files = symbolsFileList.get(symbol);
+      if (!files) files = new Set();
+      fileName = fileName
+        .substr(fileName.lastIndexOf("/") + 1, fileName.length)
+        .toLowerCase()
+        .trim();
+      files.add(fileName);
+      symbolsFileList.set(symbol, files);
+    }
+
+    function outputFileList(symbol) {
+      let ret = ``;
+      let files = symbolsFileList.get(symbol);
+      if (!files) return ret;
+      //let filesAsc = new Set([...files.entries()].sort());
+      files.forEach(function(f) {
+        ret += `${f}, `;
+      });
+      ret = ret.substr(0, ret.length - 2);
+      return ret;
     }
 
     ///// Parse File ///////////////////////////////////////////////////////////////////////////////////////////////////
-    function parseFile(text, lang) {
+    function parseFile(text, lang, fileName) {
       let fileData = [];
       let symbolData = [];
       let declarationData = [];
@@ -273,13 +324,20 @@ module.exports = {
         if (members !== undefined) fileData = fileData.concat(members);
 
         members.forEach(function(m) {
-          addMember(classes[i].path, m[0].toc.substr(0, m[0].toc.indexOf("(")));
+          addMember(
+            classes[i].path,
+            m[0].toc.substr(0, m[0].toc.indexOf("(")),
+            fileName
+          );
         });
 
         i++;
       });
 
       let declarationCount = 0;
+
+      ///// Declarations - we use these to replace custom variable names with
+      //    the actual object/type it was declared as
 
       ///// Standard Declarations
       declarationData = matchAll(text, REGEX_DECLARATION, true);
@@ -324,6 +382,7 @@ module.exports = {
               r[0] = r[0].replace("\n", "");
               if (!r[0].match(REGEX_METHOD)) {
                 symbols.set(symbol, (symbols.get(symbol) ?? 0) + 1);
+                addFileToSymbol(symbol, fileName);
               }
             });
           });
@@ -334,17 +393,18 @@ module.exports = {
       symbolData = matchAll(text, REGEX_SYMBOL, true);
       symbolData.forEach(function(data) {
         let v = toCamelCase(data[1]);
-        let type = declarations.get(v) ?? v;
+        let type = declarations.get(v) ?? `${v}`;
         if (!excludedType(type)) {
-          let token = toTitleCase(type) + "." + toCamelCase(data[2]);
-          symbols.set(token, (symbols.get(token) ?? 0) + 1);
+          let symbol = toTitleCase(type) + "." + toCamelCase(data[2]);
+          symbols.set(symbol, (symbols.get(symbol) ?? 0) + 1);
+          addFileToSymbol(symbol, fileName);
         }
       });
 
       let symbolsAsc = new Map([...symbols.entries()].sort());
 
       symbolsAsc.forEach(function(value, key) {
-        __DBG__(`${key}, refs ${value}`);
+        __DBG__(`${key}, refs ${value}: ${outputFileList(key)}`);
       });
 
       return fileData;
@@ -680,7 +740,7 @@ module.exports = {
         let lang = getLang(file);
         __LOG__(`File: ${file} Lang: ${lang}`);
         let contents = fs.readFileSync(file).toString();
-        let matches = parseFile(contents, lang);
+        let matches = parseFile(contents, lang, file);
         if (matches.length !== 0) {
           docComments[file] = matches;
         }
