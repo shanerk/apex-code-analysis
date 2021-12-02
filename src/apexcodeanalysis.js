@@ -22,20 +22,39 @@ module.exports = {
     ];
     const HIDDEN_TAGS = [`@exclude`, `@hidden`];
     const EXCLUDED_TYPES = [
-      `String`,
-      `System`,
+      `Blob`,
       `Boolean`,
-      `Sobject`,
-      `Object`,
+      `Crypto`,
+      `Database`,
+      `Date`,
+      `Datetime`,
+      `Decimal`,
+      `Double`,
+      `Exception`,
+      `Fields`,
       `Httprequest`,
       `Httpresponse`,
       `Integer`,
-      `Double`,
       `Json`,
-      `Test`,
-      `Database`,
+      `Limits`,
+      `Matcher`,
+      `Math`,
+      `Metadata`,
+      `Metadataservice`
+      `Object`,
+      `Pagereference`,
+      `Pattern`,
+      `Recordtypeinfo`,
       `Schema`,
-      `Fields`
+      `Sobject`,
+      `Sobjecttype`,
+      `String`,
+      `System`,
+      `Test`,
+      `Time`
+      `Triggernew`,
+      `Triggerold`,
+      `Userinfo`,
     ];
 
     const REGEX_TEST = /([A-Z])\w+/gi;
@@ -92,8 +111,6 @@ module.exports = {
           .source,
       "gmi"
     );
-
-    __DBG__(REGEX_METHOD.source);
 
     const REGEX_CONSTRUCTOR = new RegExp(
       REGEX_ATTRIBUTES.source +
@@ -176,6 +193,7 @@ module.exports = {
       str = toTitleCase(str).trim();
       if (str.substr(str.length - 3) == "__c") return true;
       if (str.substr(0, 4) == "Map<") return true;
+      if (str.substr(0, 4) == "Set<") return true;
       if (str.substr(0, 5) == "List<") return true;
       if (EXCLUDED_TYPES.includes(str)) return true;
       return false;
@@ -189,20 +207,20 @@ module.exports = {
       token = toCamelCase(token).trim();
       type = toTitleCase(type).trim();
       if (!declarations.get(token)) {
-        __DBG__(`${rightPad(token, 25)} : ${type}`);
+        //__DBG__(`${rightPad(token, 25)} : ${type}`);
         declarations.set(token, type);
       }
     }
 
     function addMember(apexClass, member) {
       if (!apexClass | !member) {
-        __DBG__(`Member = ${apexClass} : ${member}`);
+        //__DBG__(`Member = ${apexClass} : ${member}`);
         return;
       }
       apexClass = toTitleCase(apexClass).trim();
       member = toCamelCase(member).trim();
       let symbol = apexClass + "." + member;
-      __DBG__(`${rightPad(apexClass, 25)} : ${member}`);
+      //__DBG__(`${rightPad(apexClass, 25)} : ${member}`);
       if (!classMembers.get(apexClass)) {
         classMembers.set(apexClass, [member]);
       } else {
@@ -217,7 +235,6 @@ module.exports = {
       let symbolData = [];
       let declarationData = [];
       let paramsData = [];
-      let internalData = [];
       let classData = [];
       let classes = [];
       let allClasses = []; // Includes private and other classes so we can remove them from the parent body
@@ -262,22 +279,25 @@ module.exports = {
         i++;
       });
 
-      ///// Symbols & References
+      let declarationCount = 0;
 
-      __DBG__("\n\nStandard Declarations:");
+      ///// Standard Declarations
       declarationData = matchAll(text, REGEX_DECLARATION, true);
+      declarationCount += declarationData.length;
       declarationData.forEach(function(data) {
         addDeclaration(data[3], data[1] + (data[2] ?? ""));
       });
 
-      __DBG__("\n\nFor Loop Declarations:");
+      ///// For Loop Declarations
       declarationData = matchAll(text, REGEX_FOR, true);
+      declarationCount += declarationData.length;
       declarationData.forEach(function(data) {
         addDeclaration(data[3], data[1] + (data[2] ?? ""));
       });
 
-      __DBG__("\n\nParam Declarations:");
+      ///// Param Declarations
       paramsData = matchAll(text, REGEX_PARAMETER_LIST, true);
+      declarationCount += paramsData.length;
       paramsData.forEach(function(data) {
         let params = matchAll(data[1], REGEX_PARAM, true);
         params.forEach(function(param) {
@@ -285,32 +305,32 @@ module.exports = {
         });
       });
 
-      __DBG__("\n\nInternal References:");
+      __LOG__(`Declarations = ${declarationCount}`);
+
+      ///// Internal References
       classes.forEach(function(c) {
         let apexClass = toTitleCase(c.path).trim();
-        classMembers.get(apexClass).forEach(function(method) {
-          let methodCall = RegExp(
-            "^[ \\t\\w<>=,]*(" + method + ")+\\s*\\(.*\\)\\s*{*",
-            "gim"
-          );
-          let refs = matchAll(text, methodCall, true);
-          let symbol = apexClass + "." + method;
-          refs.forEach(function(r) {
-            // Skip method declartions, otherwise increment ref count
-            r[0] = r[0].replace("\n", "");
-            __DBG__(r[0]);
-            if (!r[0].match(REGEX_METHOD)) {
-              __DBG__(r[1]);
-              symbols.set(symbol, (symbols.get(symbol) ?? 0) + 1);
-            } else {
-              __DBG__('***' + r[1]);
-              //symbols.set(symbol, (symbols.get(symbol) ?? 0) + 0);
-            }
+        // Check if the class has any members first, some classes may have no valid member methods such as test classes
+        if (classMembers.get(apexClass)) {
+          classMembers.get(apexClass).forEach(function(method) {
+            let methodCall = RegExp(
+              "^[ \\t\\w<>=,]*(" + method + ")+\\s*\\(.*\\)\\s*{*",
+              "gim"
+            );
+            let refs = matchAll(text, methodCall, true);
+            let symbol = apexClass + "." + method;
+            refs.forEach(function(r) {
+              // Skip method declartions, otherwise increment ref count
+              r[0] = r[0].replace("\n", "");
+              if (!r[0].match(REGEX_METHOD)) {
+                symbols.set(symbol, (symbols.get(symbol) ?? 0) + 1);
+              }
+            });
           });
-        });
+        }
       });
 
-      __DBG__("\n\nCustom Code References:");
+      ///// External References
       symbolData = matchAll(text, REGEX_SYMBOL, true);
       symbolData.forEach(function(data) {
         let v = toCamelCase(data[1]);
@@ -321,8 +341,10 @@ module.exports = {
         }
       });
 
-      symbols.forEach(function(value, key) {
-        __LOG__(`${key}, refs ${value}`);
+      let symbolsAsc = new Map([...symbols.entries()].sort());
+
+      symbolsAsc.forEach(function(value, key) {
+        __DBG__(`${key}, refs ${value}`);
       });
 
       return fileData;
