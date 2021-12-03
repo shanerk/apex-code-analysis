@@ -69,13 +69,14 @@ module.exports = {
       `Triggerold`,
       `Type`,
       `Url`,
-      `Userinfo`,
+      `Userinfo`
     ];
 
     let ExcludedTypesArrays = [];
 
     EXCLUDED_TYPES.forEach(function(t) {
       ExcludedTypesArrays.push(`${t}[]`);
+      addDeclaration(undefined, t);
     });
 
     const REGEX_TEST = /([A-Z])\w+/gi;
@@ -102,7 +103,7 @@ module.exports = {
      */
     const REGEX_PARAM = /([a-zA-Z0-9_]+\s*(?:<+[a-zA-Z0-9_ ]+\,*[a-zA-Z0-9_ ]*>+)*\s*)([a-zA-Z0-9_]*)/gi;
 
-    const REGEX_PARAMETER_LIST = /[public|private|protected|global]+ [\w<>, \[\]]*\(([\w<>, )]+)\)/gi;
+    const REGEX_PARAMETER_LIST = /[public|private|protected|global]+ [\w<>, \[\]]*\(([\w<>,. )]+)\)/gi;
 
     const REGEX_STRING = /([\"'`])(?:[\s\S])*?(?:(?<!\\)\1)/gim;
     const REGEX_COMMENT = /\/\*\*(?:[^\*]|\*(?!\/))*.*?\*\//gim;
@@ -186,20 +187,6 @@ module.exports = {
       });
     }
 
-    function toCamelCase(str) {
-      if (!str) return str;
-      return str.replace(/(?:^\w|[A-Z]|\b\w|\s+)/g, function(match, index) {
-        if (+match === 0) return ""; // or if (/\s+/.test(match)) for white spaces
-        return index === 0 ? match.toLowerCase() : match.toUpperCase();
-      });
-    }
-
-    function toTitleCase(str) {
-      return str.replace(/\w\S*/g, function(txt) {
-        return txt.charAt(0).toUpperCase() + txt.substr(1).toLowerCase();
-      });
-    }
-
     function rightPad(str, padding) {
       let p = "";
       padding -= str.length;
@@ -211,7 +198,7 @@ module.exports = {
 
     function excludedType(str) {
       if (!str) return true;
-      str = toTitleCase(str).trim();
+      str = str.toLowerCase().trim();
       if (str.substr(str.length - 3) == "__c") return true;
       if (str.substr(str.length - 3) == "__r") return true;
       if (str.substr(str.length - 5) == "__mdt") return true;
@@ -227,15 +214,25 @@ module.exports = {
     }
 
     function addDeclaration(token, type) {
-      if (!token | !type) {
-        __DBG__(`*** ${token} : ${type}`);
+      if (!type) {
+        __DBG__(`***ERROR: No type defined for variable ${token}`);
         return;
       }
-      token = toCamelCase(token).trim();
-      type = toTitleCase(type).trim();
+
+      type = type.toLowerCase().trim();
+
+      if (token) {
+        token = token.toLowerCase().trim();
+        // The token here is the declared variable, and Type is the object Type
+        if (!declarations.get(token)) {
+          declarations.set(token, type);
+        }
+      }
+      // We add the Type referencing itself as well to account for static usage
+      token = type;
       if (!declarations.get(token)) {
-        //__DBG__(`${rightPad(token, 25)} : ${type}`);
         declarations.set(token, type);
+        __DBG__(`${rightPad(token, 25)} : ${type}`);
       }
     }
 
@@ -244,8 +241,8 @@ module.exports = {
         //__DBG__(`Member = ${apexClass} : ${member}`);
         return;
       }
-      apexClass = toTitleCase(apexClass).trim();
-      member = toCamelCase(member).trim();
+      apexClass = apexClass.toLowerCase().trim();
+      member = member.toLowerCase().trim();
       let symbol = apexClass + "." + member;
       //__DBG__(`${rightPad(apexClass, 25)} : ${member}`);
       if (!classMembers.get(apexClass)) {
@@ -291,11 +288,14 @@ module.exports = {
       let allClasses = []; // Includes private and other classes so we can remove them from the parent body
       let i = 0;
 
+      __DBG__(`Total declarations = ${declarations.size}`);
+
       classData = matchAll(text, REGEX_CLASS, true);
 
       ///// All classes
       classData.forEach(function(data) {
         let c = getClass(data);
+        addDeclaration(undefined, c.toc);
         allClasses.push(c);
       });
 
@@ -367,7 +367,7 @@ module.exports = {
 
       ///// Internal References
       classes.forEach(function(c) {
-        let apexClass = toTitleCase(c.path).trim();
+        let apexClass = c.toc.toLowerCase();
         // Check if the class has any members first, some classes may have no valid member methods such as test classes
         if (classMembers.get(apexClass)) {
           classMembers.get(apexClass).forEach(function(method) {
@@ -376,7 +376,7 @@ module.exports = {
               "gim"
             );
             let refs = matchAll(text, methodCall, true);
-            let symbol = apexClass + "." + method;
+            let symbol = `${apexClass}.${method}`.toLocaleLowerCase();
             refs.forEach(function(r) {
               // Skip method declartions, otherwise increment ref count
               r[0] = r[0].replace("\n", "");
@@ -392,10 +392,11 @@ module.exports = {
       ///// External References
       symbolData = matchAll(text, REGEX_SYMBOL, true);
       symbolData.forEach(function(data) {
-        let v = toCamelCase(data[1]);
+        let v = data[1].toLowerCase();
         let type = declarations.get(v) ?? `${v}`;
         if (!excludedType(type)) {
-          let symbol = toTitleCase(type) + "." + toCamelCase(data[2]);
+          if (!declarations.get(v)) __DBG__(`Orphan = ${v}`);
+          let symbol = `${type}.${data[2]}`.toLowerCase();
           symbols.set(symbol, (symbols.get(symbol) ?? 0) + 1);
           addFileToSymbol(symbol, fileName);
         }
@@ -404,7 +405,7 @@ module.exports = {
       let symbolsAsc = new Map([...symbols.entries()].sort());
 
       symbolsAsc.forEach(function(value, key) {
-        __DBG__(`${key}, refs ${value}: ${outputFileList(key)}`);
+        //__DBG__(`${key}, refs ${value}: ${outputFileList(key)}`);
       });
 
       return fileData;
