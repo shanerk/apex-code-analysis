@@ -16,60 +16,80 @@ module.exports = {
     const CLASS_TYPES = [`Class`, `Interface`];
     const CLASS_AND_ENUM_TYPES = [
       `Class`,
-      `Interface`,
+      `Database`,
       `Enum`,
+      `Interface`,
       `System`,
-      `Database`
     ];
+
+    const RESERVED = [
+      `delete`,
+      `from`,
+      `instanceof`,
+      `return`,
+      `select`,
+      `update`,
+      `upsert`,
+      `where`,
+    ];
+
     const HIDDEN_TAGS = [`@exclude`, `@hidden`];
     const EXCLUDED_TYPES = [
-      `Asyncapexjob`,
-      `Blob`,
-      `Boolean`,
-      `Crypto`,
-      `Database`,
-      `Date`,
-      `Datetime`,
-      `Decimal`,
-      `Deploycontainer`,
-      `Describefieldresult`,
-      `Double`,
-      `Emailfileattachment`,
-      `Exception`,
-      `Featuremanagement`,
-      `Fields`,
-      `Httprequest`,
-      `Httpresponse`,
-      `Id`,
-      `Integer`,
-      `Json`,
-      `Limits`,
-      `Matcher`,
-      `Math`,
-      `Messaging`,
-      `Metadata`,
-      `Metadataservice`,
-      `Object`,
-      `Pagereference`,
-      `Pattern`,
-      `Permissionset`,
-      `Recordtypeinfo`,
-      `Recordtype`,
-      `Schema`,
-      `Schema.sobjectfield`,
-      `Schema.sobjecttype`,
-      `Singleemailmessage`,
-      `Sobject`,
-      `Sobjecttype`,
-      `String`,
-      `System`,
-      `Test`,
-      `Time`,
-      `Triggernew`,
-      `Triggerold`,
-      `Type`,
-      `Url`,
-      `Userinfo`
+      `permissionsetassignment`,
+      `asyncapexjob`,
+      `batchablecontext`,
+      `blob`,
+      `boolean`,
+      `crypto`,
+      `custompermission`,
+      `database`,
+      `date`,
+      `datetime`,
+      `decimal`,
+      `deploycontainer`,
+      `describefieldresult`,
+      `describesobjectresult`,
+      `double`,
+      `emailfileattachment`,
+      `exception`,
+      `featuremanagement`,
+      `fieldpermissions`,
+      `fields`,
+      `groupmember`,
+      `httprequest`,
+      `httpresponse`,
+      `id`,
+      `integer`,
+      `json`,
+      `limits`,
+      `map`,
+      `matcher`,
+      `math`,
+      `messaging`,
+      `metadata`,
+      `metadataservice`,
+      `object`,
+      `pagereference`,
+      `pattern`,
+      `permissionset`,
+      `profile`,
+      `recordtype`,
+      `recordtypeinfo`,
+      `schema.sobjectfield`,
+      `schema.sobjecttype`,
+      `schema`,
+      `singleemailmessage`,
+      `sobject`,
+      `sobjecttype`,
+      `string`,
+      `system`,
+      `test`,
+      `time`,
+      `triggernew`,
+      `triggerold`,
+      `type`,
+      `url`,
+      `userinfo`,
     ];
 
     let ExcludedTypesArrays = [];
@@ -94,7 +114,7 @@ module.exports = {
      */
     const REGEX_DECLARATION = /([\w\[\]]+) *(<+.*>+)*[ \t]+([\w]+)\s*(?:=\s*(\[|new|\(+\1(?:<+.*>+)*\))*\s*([\w']+)(<+.*>+)*|;)/gim;
 
-    const REGEX_FOR = /(?:for|catch)\s*\(([\w\.]+)(<+.*>+)* ([\w]+)/gi;
+    const REGEX_FOR = /(?:for|catch)\s*\(([\w\. ]+)(<+.*>+)* ([\w]+)/gi;
 
     /**
      * Capture group 1 = Object or primitive type
@@ -220,6 +240,11 @@ module.exports = {
       }
 
       type = type.toLowerCase().trim();
+
+      // Skip reserved words such as return statements
+      if (RESERVED.includes(type)) {
+        return;
+      }
 
       if (token) {
         token = token.toLowerCase().trim();
