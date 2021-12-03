@@ -19,7 +19,7 @@ module.exports = {
       `Database`,
       `Enum`,
       `Interface`,
-      `System`,
+      `System`
     ];
 
     const RESERVED = [
@@ -30,7 +30,7 @@ module.exports = {
       `select`,
       `update`,
       `upsert`,
-      `where`,
+      `where`
     ];
 
     const HIDDEN_TAGS = [`@exclude`, `@hidden`];
@@ -89,14 +89,14 @@ module.exports = {
       `triggerold`,
       `type`,
       `url`,
-      `userinfo`,
+      `userinfo`
     ];
 
     let ExcludedTypesArrays = [];
 
     EXCLUDED_TYPES.forEach(function(t) {
       ExcludedTypesArrays.push(`${t}[]`);
-      addDeclaration(undefined, t);
+      addDeclaration(undefined, t, true);
     });
 
     const REGEX_TEST = /([A-Z])\w+/gi;
@@ -233,7 +233,7 @@ module.exports = {
       return false;
     }
 
-    function addDeclaration(token, type) {
+    function addDeclaration(token, type, skipDebug) {
       if (!type) {
         __DBG__(`***ERROR: No type defined for variable ${token}`);
         return;
@@ -257,7 +257,7 @@ module.exports = {
       token = type;
       if (!declarations.get(token)) {
         declarations.set(token, type);
-        __DBG__(`${rightPad(token, 25)} : ${type}`);
+        if (!skipDebug) __DBG__(`${rightPad(token, 25)} : ${type}`);
       }
     }
 
@@ -313,14 +313,12 @@ module.exports = {
       let allClasses = []; // Includes private and other classes so we can remove them from the parent body
       let i = 0;
 
-      __DBG__(`Total declarations = ${declarations.size}`);
-
       classData = matchAll(text, REGEX_CLASS, true);
 
       ///// All classes
       classData.forEach(function(data) {
         let c = getClass(data);
-        addDeclaration(undefined, c.toc);
+        addDeclaration(undefined, c.toc, `skip_debug`);
         allClasses.push(c);
       });
 
@@ -764,7 +762,7 @@ module.exports = {
           continue;
         }
         let lang = getLang(file);
-        __LOG__(`File: ${file} Lang: ${lang}`);
+        __LOG__(`File = ${file} Lang: ${lang}`, 1);
         let contents = fs.readFileSync(file).toString();
         let matches = parseFile(contents, lang, file);
         if (matches.length !== 0) {
@@ -1116,13 +1114,16 @@ module.exports = {
       //*/
     }
 
-    function __LOG__(msg) {
+    function __LOG__(msg, bump) {
       if (options.output === undefined) {
         return;
       }
       let otherArgs = Array.prototype.slice.call(arguments);
       otherArgs.shift();
-      console.log.apply(console, ["[LOG] " + msg].concat(otherArgs));
+      if (bump) {
+        console.log(`\n`);
+      }
+      console.log.apply(console, ["[LOG] " + msg]);
     }
   }
 };
