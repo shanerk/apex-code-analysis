@@ -257,7 +257,7 @@ module.exports = {
       token = type;
       if (!declarations.get(token)) {
         declarations.set(token, type);
-        if (!skipDebug) __DBG__(`${rightPad(token, 25)} : ${type}`);
+        //if (!skipDebug) __DBG__(`${rightPad(token, 25)} : ${type}`);
       }
     }
 
@@ -418,17 +418,11 @@ module.exports = {
         let v = data[1].toLowerCase();
         let type = declarations.get(v) ?? `${v}`;
         if (!excludedType(type)) {
-          if (!declarations.get(v)) __DBG__(`Orphan = ${v}`);
+          //if (!declarations.get(v)) __DBG__(`Orphan = ${v}`);
           let symbol = `${type}.${data[2]}`.toLowerCase();
           symbols.set(symbol, (symbols.get(symbol) ?? 0) + 1);
           addFileToSymbol(symbol, fileName);
         }
-      });
-
-      let symbolsAsc = new Map([...symbols.entries()].sort());
-
-      symbolsAsc.forEach(function(value, key) {
-        //__DBG__(`${key}, refs ${value}: ${outputFileList(key)}`);
       });
 
       return fileData;
@@ -568,6 +562,7 @@ module.exports = {
           let firstParam = true;
           let isMethod = false;
           let parentName;
+          let className;
           for (let a = 0; a < docCommentsFile.length; a++) {
             let cdataList = docCommentsFile[a];
             if (cdataList === null || cdataList === undefined) break;
@@ -640,6 +635,7 @@ module.exports = {
                 ///// Classes, Enum & Interface types
                 if (CLASS_AND_ENUM_TYPES.includes(entityType)) {
                   entityType = entityType.toLowerCase();
+                  className = classPath;
                   tocData += `\n1. [${classPath} ${entityType}](#${classPath.replace(
                     /\s/g,
                     "-"
@@ -658,10 +654,15 @@ module.exports = {
 
                   ///// Methods
                 } else if (entityType === "Method") {
+                  let key = `${className}.${entityName}`;
+                  key = key.substring(0, key.indexOf(`(`)).toLowerCase();
+                  let value = symbols.get(key);
+                  let refs = `${value} refs: ${outputFileList(key)}`;
+                  
                   tocData += `\n   * ${escapeAngleBrackets(
                     entityName
                   )}${deprecated}`;
-                  text = `#### ${escapeAngleBrackets(text)}${deprecated}`;
+                  text = `#### ${escapeAngleBrackets(text)}${deprecated}\n* ${refs}`;
 
                   ///// Parameters
                 } else if (entityType === "Param") {
