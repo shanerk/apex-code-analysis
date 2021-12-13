@@ -35,13 +35,16 @@ module.exports = {
 
     const HIDDEN_TAGS = [`@exclude`, `@hidden`];
     const EXCLUDED_TYPES = [
-      `permissionsetassignment`,
+      `account`,
+      `apexpages`,
       `asyncapexjob`,
       `batchablecontext`,
       `blob`,
       `boolean`,
+      `contact`,
       `crypto`,
       `custompermission`,
+      `database.error`,
       `database`,
       `date`,
       `datetime`,
@@ -68,10 +71,14 @@ module.exports = {
       `messaging`,
       `metadata`,
       `metadataservice`,
+      `newmap`,
       `object`,
+      `oldmap`,
+      `opportunity`,
       `pagereference`,
       `pattern`,
       `permissionset`,
+      `permissionsetassignment`,
       `profile`,
       `recordtype`,
       `recordtypeinfo`,
@@ -127,9 +134,10 @@ module.exports = {
 
     const REGEX_STRING = /([\"'`])(?:[\s\S])*?(?:(?<!\\)\1)/gim;
     const REGEX_COMMENT = /\/\*\*(?:[^\*]|\*(?!\/))*.*?\*\//gim;
+    const REGEX_COMMENT_INLINE = /\/\/.*$/gim;
     const REGEX_ATTRIBUTES = /(?:\@[^\n]*[\s]+)*/gim;
     const REGEX_COMMENT_CODE_BLOCK = /{@code((?:\s(?!(?:^}))|\S)*)\s*}/gim;
-    const REGEX_ACCESSORS = /^[ \t]*(global|public|private)/gi;
+    const REGEX_ACCESSORS = /^[ \t]*(global|public|protected|private)/gi;
 
     const REGEX_CLASS = new RegExp(
       REGEX_ATTRIBUTES.source +
@@ -141,7 +149,7 @@ module.exports = {
 
     const REGEX_ABSTRACT_METHOD = new RegExp(
       REGEX_ATTRIBUTES.source +
-        /(?:\@[^\n]*[\s]+)*^[ \t]*(abstract)[ \t]*(global|public|private)[ \t]*([\w]*)[ \t]+([\w\<\>\[\]\,\. ]*)[ \t]+([\w]+)[ \t]*(\([^\)]*\))\s*(?:{|;)/
+        /(?:\@[^\n]*[\s]+)*^[ \t]*(abstract)[ \t]*(global|public|protected|private)[ \t]*([\w]*)[ \t]+([\w\<\>\[\]\,\. ]*)[ \t]+([\w]+)[ \t]*(\([^\)]*\))\s*(?:{|;)/
           .source,
       "gmi"
     );
@@ -207,101 +215,6 @@ module.exports = {
       });
     }
 
-    function rightPad(str, padding) {
-      let p = "";
-      padding -= str.length;
-      while (padding-- > 0) {
-        p += " ";
-      }
-      return str + p;
-    }
-
-    function excludedType(str) {
-      if (!str) return true;
-      str = str.toLowerCase().trim();
-      if (str.substr(str.length - 3) == "__c") return true;
-      if (str.substr(str.length - 3) == "__r") return true;
-      if (str.substr(str.length - 5) == "__mdt") return true;
-      if (str.substr(str.length - 5) == "__c[]") return true;
-      if (str.substr(str.length - 5) == "__r[]") return true;
-      if (str.substr(0, 4) == "Map<") return true;
-      if (str.substr(0, 4) == "Set<") return true;
-      if (str.substr(0, 5) == "List<") return true;
-      if (str == `[]`) return true;
-      if (EXCLUDED_TYPES.includes(str)) return true;
-      if (ExcludedTypesArrays.includes(str)) return true;
-      return false;
-    }
-
-    function addDeclaration(token, type, skipDebug) {
-      if (!type) {
-        __DBG__(`***ERROR: No type defined for variable ${token}`);
-        return;
-      }
-
-      type = type.toLowerCase().trim();
-
-      // Skip reserved words such as return statements
-      if (RESERVED.includes(type)) {
-        return;
-      }
-
-      if (token) {
-        token = token.toLowerCase().trim();
-        // The token here is the declared variable, and Type is the object Type
-        if (!declarations.get(token)) {
-          declarations.set(token, type);
-        }
-      }
-      // We add the Type referencing itself as well to account for static usage
-      token = type;
-      if (!declarations.get(token)) {
-        declarations.set(token, type);
-        //if (!skipDebug) __DBG__(`${rightPad(token, 25)} : ${type}`);
-      }
-    }
-
-    function addMember(apexClass, member, fileName) {
-      if (!apexClass | !member) {
-        //__DBG__(`Member = ${apexClass} : ${member}`);
-        return;
-      }
-      apexClass = apexClass.toLowerCase().trim();
-      member = member.toLowerCase().trim();
-      let symbol = apexClass + "." + member;
-      //__DBG__(`${rightPad(apexClass, 25)} : ${member}`);
-      if (!classMembers.get(apexClass)) {
-        classMembers.set(apexClass, [member]);
-      } else {
-        classMembers.get(apexClass).push(member);
-      }
-      symbols.set(symbol, (symbols.get(symbol) ?? 0) + 0);
-      addFileToSymbol(symbol, fileName);
-    }
-
-    function addFileToSymbol(symbol, fileName) {
-      let files = symbolsFileList.get(symbol);
-      if (!files) files = new Set();
-      fileName = fileName
-        .substr(fileName.lastIndexOf("/") + 1, fileName.length)
-        .toLowerCase()
-        .trim();
-      files.add(fileName);
-      symbolsFileList.set(symbol, files);
-    }
-
-    function outputFileList(symbol) {
-      let ret = ``;
-      let files = symbolsFileList.get(symbol);
-      if (!files) return ret;
-      //let filesAsc = new Set([...files.entries()].sort());
-      files.forEach(function(f) {
-        ret += `${f}, `;
-      });
-      ret = ret.substr(0, ret.length - 2);
-      return ret;
-    }
-
     ///// Parse File ///////////////////////////////////////////////////////////////////////////////////////////////////
     function parseFile(text, lang, fileName) {
       let fileData = [];
@@ -310,42 +223,38 @@ module.exports = {
       let paramsData = [];
       let classData = [];
       let classes = [];
-      let allClasses = []; // Includes private and other classes so we can remove them from the parent body
       let i = 0;
 
       classData = matchAll(text, REGEX_CLASS, true);
 
-      ///// All classes
-      classData.forEach(function(data) {
-        let c = getClass(data);
-        addDeclaration(undefined, c.toc, `skip_debug`);
-        allClasses.push(c);
-      });
-
-      ///// Filtered classes (only public and global)
-      classData = filter(classData, lang, undefined, "classes");
       __LOG__("Classes = " + classData.length);
 
-      classData.forEach(function(data) {
-        let c = getClass(data);
-        classes.push(c);
+      classData.forEach(function(c) {
+        classes.push(getClass(c));
       });
 
-      classes = setClassBodyCodeOnly(allClasses);
+      classes = setClassBodyCodeOnly(classes);
       classes = setLevels(classes);
       classes = setClassPaths(classes); //.sort(ClassComparator);
 
       classData.forEach(function(data) {
+        __LOG__(
+          `Class = ${classes[i].path} ${classes[i].isTest ? `Test Class` : ``}`
+        );
+
+        // Append this class def to the output stream
         let parsedClass = parseData([data], ENTITY_TYPE.CLASS, classes[i]);
-        __LOG__("Class = " + classes[i].path);
         if (fileData.length === 0) {
           fileData = parsedClass;
         } else {
           fileData = fileData.concat(parsedClass);
         }
+
+        // Append the class member defs to the output stream
         let members = parseClass(classes[i], lang);
         if (members !== undefined) fileData = fileData.concat(members);
 
+        // TODO: Document this
         members.forEach(function(m) {
           addMember(
             classes[i].path,
@@ -417,8 +326,9 @@ module.exports = {
       symbolData.forEach(function(data) {
         let v = data[1].toLowerCase();
         let type = declarations.get(v) ?? `${v}`;
+
         if (!excludedType(type)) {
-          //if (!declarations.get(v)) __DBG__(`Orphan = ${v}`);
+          __DBG__(`${v} = ${type}`);
           let symbol = `${type}.${data[2]}`.toLowerCase();
           symbols.set(symbol, (symbols.get(symbol) ?? 0) + 1);
           addFileToSymbol(symbol, fileName);
@@ -435,14 +345,13 @@ module.exports = {
 
       ///// Handle Properties
       let propertyData = matchAll(target.bodyCodeOnly, REGEX_PROPERTY, true);
-      propertyData = filter(propertyData, lang, classType, "properties");
+      //propertyData = filter(propertyData, lang, classType, "properties");
       __LOG__("Properties = " + propertyData.length);
 
       if (propertyData.length > 0) {
         children = children.concat(
           parseData(propertyData, ENTITY_TYPE.PROPERTY)
         );
-        // TODO: Add these to global property list
       }
 
       ///// Handle Constructors
@@ -451,14 +360,13 @@ module.exports = {
         REGEX_CONSTRUCTOR,
         true
       );
-      constructorData = filter(constructorData, lang, classType);
+      //constructorData = filter(constructorData, lang, classType);
       __LOG__("Constructors = " + constructorData.length);
 
       if (constructorData.length > 0) {
         children = children.concat(
           parseData(constructorData, ENTITY_TYPE.CONSTRUCTOR)
         );
-        // TODO: Add these to global constructors list
       }
 
       ///// Handle Abstract Methods
@@ -467,22 +375,20 @@ module.exports = {
         REGEX_ABSTRACT_METHOD,
         true
       );
-      abstractData = filter(abstractData, lang, classType, "abstracts");
+      //abstractData = filter(abstractData, lang, classType, "abstracts");
       __LOG__("Abstract Methods = " + abstractData.length);
 
       if (abstractData.length > 0) {
         children = children.concat(parseData(abstractData, ENTITY_TYPE.METHOD));
-        // TODO: Add these to global abstract methods list
       }
 
       ///// Handle Methods
       let methodData = matchAll(target.bodyCodeOnly, REGEX_METHOD, true);
-      methodData = filter(methodData, lang, classType, "methods");
+      //methodData = filter(methodData, lang, classType, "methods");
       __LOG__("Methods = " + methodData.length);
 
       if (methodData.length > 0) {
         children = children.concat(parseData(methodData, ENTITY_TYPE.METHOD));
-        // TODO: Add these to global mthods list
       }
 
       return children;
@@ -524,7 +430,7 @@ module.exports = {
         ///// Skip invalid entities, or entities that have excluded accessors (see getEntity() method)
         if (entityHeader === undefined) return;
 
-        ///// Flag for todo
+        ///// TODO:
         // if (entityHeader.isCommentRequired && !entityHeader.isDeprecated) {
         //   commentData.push({
         //     name: "todo",
@@ -658,11 +564,13 @@ module.exports = {
                   key = key.substring(0, key.indexOf(`(`)).toLowerCase();
                   let value = symbols.get(key);
                   let refs = `${value} refs: ${outputFileList(key)}`;
-                  
+
                   tocData += `\n   * ${escapeAngleBrackets(
                     entityName
                   )}${deprecated}`;
-                  text = `#### ${escapeAngleBrackets(text)}${deprecated}\n* ${refs}`;
+                  text = `#### ${escapeAngleBrackets(
+                    text
+                  )}${deprecated}\n* ${refs}`;
 
                   ///// Parameters
                 } else if (entityType === "Param") {
@@ -713,16 +621,28 @@ module.exports = {
         data = JSON.stringify(docComments, null, 4);
       }
 
+      ///// CSV References file
+      let csvData = "";
+      let symbolsAsc = new Map([...symbols.entries()].sort());
+      symbolsAsc.forEach(function(value, key) {
+        csvData += `\n"${key}",${value},"${outputFileList(key)}"`;
+      });
+      csvData = `Method,References,Files` + csvData;
+
       if (options.output === undefined) {
         console.log(data);
 
         ///// Write out to the specified file
       } else {
         __LOG__("Writing results to: " + options.output);
+        let csvFile =
+          options.output.substring(0, options.output.indexOf(`.`)) + `.csv`;
+
         let folder = path.dirname(options.output);
         if (fs.existsSync(folder)) {
           if (fs.lstatSync(folder).isDirectory()) {
             fs.writeFileSync(options.output, data, "utf8");
+            fs.writeFileSync(csvFile, csvData, "utf8");
           } else {
             throw {
               name: "DumpingResultsError",
@@ -732,6 +652,7 @@ module.exports = {
         } else {
           mkdirp.sync(folder);
           fs.writeFileSync(options.output, data, "utf8");
+          fs.writeFileSync(csvFile, csvData, "utf8");
         }
       }
       return data;
@@ -759,7 +680,7 @@ module.exports = {
           file.indexOf("__") != -1 ||
           file.indexOf("MetadataService.cls") != -1
         ) {
-          //__LOG__(`File: ${file} skipped.`);
+          __LOG__(`File: ${file} skipped.`);
           continue;
         }
         let lang = getLang(file);
@@ -774,6 +695,87 @@ module.exports = {
     }
 
     ///// Utility Methods //////////////////////////////////////////////////////////////////////////////////////////////
+    function excludedType(str) {
+      if (!str) return true;
+      str = str.toLowerCase().trim();
+      if (str.substr(str.length - 3) == "__c") return true;
+      if (str.substr(str.length - 3) == "__r") return true;
+      if (str.substr(str.length - 5) == "__mdt") return true;
+      if (str.substr(str.length - 2) == "[]") return true;
+      if (str.substr(0, 4) == "map<") return true;
+      if (str.substr(0, 4) == "set<") return true;
+      if (str.substr(0, 5) == "list<") return true;
+      if (str == `[]`) return true;
+      if (EXCLUDED_TYPES.includes(str)) return true;
+      if (ExcludedTypesArrays.includes(str)) return true;
+      return false;
+    }
+
+    function addDeclaration(token, type) {
+      if (!type) {
+        __LOG__(`***ERROR: No type defined for variable ${token}`);
+        return;
+      }
+
+      type = type.toLowerCase().trim();
+
+      // Skip reserved words such as return statements
+      if (RESERVED.includes(type)) {
+        return;
+      }
+
+      if (token) {
+        token = token.toLowerCase().trim();
+        // The token here is the declared variable, and Type is the object Type
+        if (!declarations.get(token)) {
+          declarations.set(token, type);
+        }
+      }
+      // We add the Type referencing itself as well to account for static usage
+      token = type;
+      if (!declarations.get(token)) {
+        declarations.set(token, type);
+      }
+    }
+
+    function addMember(apexClass, member, fileName) {
+      if (!apexClass | !member) {
+        return;
+      }
+      apexClass = apexClass.toLowerCase().trim();
+      member = member.toLowerCase().trim();
+      let symbol = apexClass + "." + member;
+      if (!classMembers.get(apexClass)) {
+        classMembers.set(apexClass, [member]);
+      } else {
+        classMembers.get(apexClass).push(member);
+      }
+      symbols.set(symbol, (symbols.get(symbol) ?? 0) + 0);
+      addFileToSymbol(symbol, fileName);
+    }
+
+    function addFileToSymbol(symbol, fileName) {
+      let files = symbolsFileList.get(symbol);
+      if (!files) files = new Set();
+      fileName = fileName
+        .substr(fileName.lastIndexOf("/") + 1, fileName.length)
+        .toLowerCase()
+        .trim();
+      files.add(fileName);
+      symbolsFileList.set(symbol, files);
+    }
+
+    function outputFileList(symbol) {
+      let ret = ``;
+      let files = symbolsFileList.get(symbol);
+      if (!files) return ret;
+      files.forEach(function(f) {
+        ret += `${f}, `;
+      });
+      ret = ret.substr(0, ret.length - 2);
+      return ret;
+    }
+
     function getEnumBody(str) {
       let ret = [];
       if (str === undefined) return ret;
@@ -803,45 +805,6 @@ module.exports = {
       return ret;
     }
 
-    function filter(data, lang, parentType, type) {
-      data = filterByAccessors(data, lang, parentType, type);
-      data = filterByHidden(data, lang, parentType);
-      return data;
-    }
-
-    function filterByAccessors(data, lang, parentType, type) {
-      let ret = [];
-      data.forEach(function(target) {
-        if (
-          options.accessors.includes(target[1]) ||
-          (parentType === `interface` && lang === `apex` && isEmpty(target[1]))
-        ) {
-          ret.push(target);
-        } else {
-          __DBG__(
-            `Filtered out ${target[1]} accessor for entity ${target[4]}.`
-          );
-        }
-      });
-      if (ret.length < data.length)
-        __DBG__(
-          `Filtered out ${data.length - ret.length} ${type} based on accessors.`
-        );
-      return ret;
-    }
-
-    function filterByHidden(data) {
-      let ret = [];
-      data.forEach(function(target) {
-        if (!isHidden(target)) ret.push(target);
-      });
-      if (ret.length < data.length)
-        __DBG__(
-          `Filtered out ${data.length - ret.length} types which are @hidden.`
-        );
-      return ret;
-    }
-
     function isHidden(data) {
       let ret = false;
       let jd = data[0].match(REGEX_COMMENT);
@@ -854,19 +817,6 @@ module.exports = {
       });
       return ret;
     }
-
-    // function merge(data1, data2, key1, key2) {
-    //   let keys = [];
-    //   data1.forEach(function(item) {
-    //     keys.push(item[key1]);
-    //   });
-    //   data2.forEach(function(item) {
-    //     if (!keys.includes(item[key2])) {
-    //       data1.push(item);
-    //     }
-    //   });
-    //   return data1;
-    // }
 
     function EntityComparator(a, b) {
       if (a[4] < b[4]) return -1;
@@ -959,6 +909,7 @@ module.exports = {
         descrip: ``,
         level: undefined,
         isDeprecated: data[0].includes(`@Deprecated`),
+        isTest: data[0].includes(`@isTest`),
         isCommentRequired:
           data[3] !== `enum` && (!data[5] || data[5].includes(`exception`)),
         isExclude: isHidden(data)
@@ -1013,13 +964,14 @@ module.exports = {
      * @param {*} classes
      */
     function setClassBodyCodeOnly(classes) {
-      classes.forEach(function(target) {
-        target.bodyCodeOnly = target.body;
-        classes.forEach(function(cur) {
-          if (target !== cur) {
-            let isChild = target.body.includes(cur.signature);
+      classes.forEach(function(c) {
+        if (c.body === undefined) return; // continue the forEach
+        c.bodyCodeOnly = c.body;
+        classes.forEach(function(comp) {
+          if (c !== comp) {
+            let isChild = c.body.includes(comp.signature);
             if (isChild) {
-              target.bodyCodeOnly = target.bodyCodeOnly.replace(cur.body, ``);
+              c.bodyCodeOnly = c.bodyCodeOnly.replace(comp.body, ``);
             }
           }
         });
@@ -1034,15 +986,19 @@ module.exports = {
       return lineNum;
     }
 
+    // Counts opening and closing brackets to find the terminator of the class def
     function getEndIndex(data) {
       let codeBlock = data.input.substring(data.index, data.input.length);
       ///// Replace comment bodies with spaces to prevent non-code matches, while still keeping the indexes the same
       codeBlock = codeBlock.replace(REGEX_COMMENT, function(match, p1) {
-        return "/**" + "".padStart(match.length - 5) + "*/";
+        return "/**" + "".padStart(match.length - 5, "%") + "*/";
+      });
+      codeBlock = codeBlock.replace(REGEX_COMMENT_INLINE, function(match, p1) {
+        return "//".padEnd(match.length, "%");
       });
       ///// Replace string literals with spaces to prevent non-code matches, while still keeping the indexes the same
       codeBlock = codeBlock.replace(REGEX_STRING, function(match, p1) {
-        return p1 + "".padStart(match.length - 2) + p1;
+        return p1 + "".padStart(match.length - 2, "%") + p1;
       });
       let ob = 0;
       let cb = 0;
@@ -1055,7 +1011,6 @@ module.exports = {
           break;
         }
       }
-      codeBlock = data.input.substring(data.index, endIndex);
       return endIndex;
     }
 
@@ -1128,9 +1083,3 @@ module.exports = {
     }
   }
 };
-
-function Symbol(parent, token, refs) {
-  this.parent = parent;
-  this.token = token;
-  this.refs = refs;
-}
