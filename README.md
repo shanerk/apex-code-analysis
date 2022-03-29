@@ -28,29 +28,23 @@ Add it to your PATH, for instance within `~\.bash-profile` like so:
 
 `export PATH=$PATH:/usr/local/Cellar/node/10.5.0/bin`
 
-## 2. Features
+## 2. Usage
 
-## 3. Specify apexcodeanalysis comments
+Once installed globally, you can run the cli from your terminal.
 
-A valid apexcodeanalysis unit of information is made by any comment that:
+This will scan the current folder and sub-folders for Apex code and produce a the report in markdown format (using the default settings, see below):
 
-· Starts with tabulations or spaces or nothing, followed by `/**`.
+`~$ apexcodeanalysis -o out.md`
 
-· Ends with tabulations or spaces or nothing, followed by `*/`.
+Two files will be generated: `out.md` and `out.csv`  Both contain a list of all the methods organized by class name along with the reference count and which files reference the method.
 
-#### Input:
+The following example uses the `-include` and `-exclude` flags to specify the files to expand more granularly:
 
-## 4. Extract documentation
+`~$ apexcodeanalysis -i 1.cls 2*.cls -o out.md -f markdown -e 2_exclude_me.cls`
 
-### Extract documentation by the CLI
+Which expands to:
 
-Once installed globally, you can run from your terminal:
-
-`~$ apexcodeanalysis -i 1.js 2.js 3.js -o out.md -f markdown -e 2.js`
-
-Which would mean:
-
-`~$ apexcodeanalysis --include 1.js 2.js 3.js --output out.md --format markdown --exclude 2.js`
+`~$ apexcodeanalysis -include 1.cls 2*.cls -output out.md -format json -exlude 2_exclude_me.cls`
 
 ### Other considerations
 
@@ -69,7 +63,6 @@ By default, the values of each option are:
 }
 ```
 
-To add the symbols `*/` inside our apexcodeanalysis comments, simply write `* /` instead,
-and this will be translated to `*/` automatically.
-
-abcdefg hijklmnop qrstuvwxyz 123 456 789 -+'[]{}\|'";:/?.>,<>
+# BUG LIST
+* 2022-03-28 Not able to detect current class for method calls and replace this.METHOD with CLASS.METHOD
+* 2022-03-28 Not able to detect class membership for method calls when calling from within containing class.  Similar to above but without this. preceeding METHOD

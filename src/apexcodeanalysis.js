@@ -224,6 +224,7 @@ module.exports = {
       let classData = [];
       let classes = [];
       let i = 0;
+      let parsedText;
 
       classData = matchAll(text, REGEX_CLASS, true);
 
@@ -236,6 +237,14 @@ module.exports = {
       classes = setClassBodyCodeOnly(classes);
       classes = setLevels(classes);
       classes = setClassPaths(classes); //.sort(ClassComparator);
+
+      // Build parsedText
+      classes.forEach(function(c) {
+        parsedText += '\n' + c.bodyCodeOnly.replace(/this\./gi, `${c.toc.toLowerCase()}.`);
+      });
+
+      // This handles for test classes, which won't have code in the parsedText
+      parsedText = parsedText != null ? parsedText : text;
 
       classData.forEach(function(data) {
         __LOG__(
@@ -254,11 +263,13 @@ module.exports = {
         let members = parseClass(classes[i], lang);
         if (members !== undefined) fileData = fileData.concat(members);
 
-        // TODO: Document this
+        // Adds members to the classMembers map with the class name as the key
         members.forEach(function(m) {
+          let symbol = m[0].toc.substr(0, m[0].toc.indexOf("("));
+          //__DBG__(`${classes[i].path},${symbol}`);
           addMember(
             classes[i].path,
-            m[0].toc.substr(0, m[0].toc.indexOf("(")),
+            symbol,
             fileName
           );
         });
@@ -272,21 +283,21 @@ module.exports = {
       //    the actual object/type it was declared as
 
       ///// Standard Declarations
-      declarationData = matchAll(text, REGEX_DECLARATION, true);
+      declarationData = matchAll(parsedText, REGEX_DECLARATION, true);
       declarationCount += declarationData.length;
       declarationData.forEach(function(data) {
         addDeclaration(data[3], data[1] + (data[2] ?? ""));
       });
 
       ///// For Loop Declarations
-      declarationData = matchAll(text, REGEX_FOR, true);
+      declarationData = matchAll(parsedText, REGEX_FOR, true);
       declarationCount += declarationData.length;
       declarationData.forEach(function(data) {
         addDeclaration(data[3], data[1] + (data[2] ?? ""));
       });
 
       ///// Param Declarations
-      paramsData = matchAll(text, REGEX_PARAMETER_LIST, true);
+      paramsData = matchAll(parsedText, REGEX_PARAMETER_LIST, true);
       declarationCount += paramsData.length;
       paramsData.forEach(function(data) {
         let params = matchAll(data[1], REGEX_PARAM, true);
@@ -297,23 +308,26 @@ module.exports = {
 
       __LOG__(`Declarations = ${declarationCount}`);
 
-      ///// Internal References
+      ///// Internal References (to class methods inside this file)
       classes.forEach(function(c) {
-        let apexClass = c.toc.toLowerCase();
+        let apexClass = c.path.toLowerCase();
+        //__DBG__('Class = ' + apexClass);
         // Check if the class has any members first, some classes may have no valid member methods such as test classes
         if (classMembers.get(apexClass)) {
           classMembers.get(apexClass).forEach(function(method) {
             let methodCall = RegExp(
-              "^[ \\t\\w<>=,]*(" + method + ")+\\s*\\(.*\\)\\s*{*",
+              "^[ \\t\\w<>=,\\.]*(" + method + ")+[\\s]*\\([\\w\\d\\s\\(\\)'<>\\.,]*\\)\\s*[{|;]?",
               "gim"
             );
-            let refs = matchAll(text, methodCall, true);
+            //__DBG__('Method = ' + method);
+            let refs = matchAll(parsedText, methodCall, true);
             let symbol = `${apexClass}.${method}`.toLocaleLowerCase();
+
             refs.forEach(function(r) {
-              // Skip method declartions, otherwise increment ref count
-              r[0] = r[0].replace("\n", "");
+              r[0] = r[0].replace(/[\s]/g, ` `);
+              // Include all refs but not method declarations
               if (!r[0].match(REGEX_METHOD)) {
-                symbols.set(symbol, (symbols.get(symbol) ?? 0) + 1);
+                symbols.set(symbol, (symbols.get(symbol) ?? 0) + 1); // increment
                 addFileToSymbol(symbol, fileName);
               }
             });
@@ -321,14 +335,13 @@ module.exports = {
         }
       });
 
-      ///// External References
-      symbolData = matchAll(text, REGEX_SYMBOL, true);
+      ///// External References (to class methods outside this file)
+      symbolData = matchAll(parsedText, REGEX_SYMBOL, true);
       symbolData.forEach(function(data) {
         let v = data[1].toLowerCase();
         let type = declarations.get(v) ?? `${v}`;
 
         if (!excludedType(type)) {
-          __DBG__(`${v} = ${type}`);
           let symbol = `${type}.${data[2]}`.toLowerCase();
           symbols.set(symbol, (symbols.get(symbol) ?? 0) + 1);
           addFileToSymbol(symbol, fileName);
@@ -390,7 +403,6 @@ module.exports = {
       if (methodData.length > 0) {
         children = children.concat(parseData(methodData, ENTITY_TYPE.METHOD));
       }
-
       return children;
     }
 
@@ -429,14 +441,6 @@ module.exports = {
 
         ///// Skip invalid entities, or entities that have excluded accessors (see getEntity() method)
         if (entityHeader === undefined) return;
-
-        ///// TODO:
-        // if (entityHeader.isCommentRequired && !entityHeader.isDeprecated) {
-        //   commentData.push({
-        //     name: "todo",
-        //     text: STR_TODO.replace("_ENTITY_", entityHeader.name)
-        //   });
-        // }
 
         ///// Push onto output stack
         if (entityType != ENTITY_TYPE.PROPERTY && entityHeader.name != "enum") {
@@ -663,12 +667,7 @@ module.exports = {
       const globule = require("globule");
       const fs = require("fs");
       let docComments = {};
-      __LOG__("Starting.");
-      __LOG__("Files:", options.include);
-      __LOG__("Excluded:", options.exclude);
-      __LOG__("Output:", options.output);
-      __LOG__("Format:", options.format);
-      __LOG__("Accessors:", options.accessors);
+      __LOG__("Starting...");
       const files = globule.find(
         [].concat(options.include).concat(options.exclude)
       );
@@ -678,7 +677,8 @@ module.exports = {
         // Skip managed package files & MetadataService
         if (
           file.indexOf("__") != -1 ||
-          file.indexOf("MetadataService.cls") != -1
+          file.indexOf("MetadataService.cls") != -1 ||
+          file.indexOf("MetadataServiceTest.cls") != -1
         ) {
           __LOG__(`File: ${file} skipped.`);
           continue;
@@ -790,17 +790,11 @@ module.exports = {
       let result = undefined;
       let i = 0;
       let noComments = str.replace(REGEX_COMMENT, ``).replace(/\/\/.*/g, ``);
-      while ((result = regexp.exec(str)) && ++i < 1000) {
-        if (
-          noComments.includes(result[0]) ||
-          result[0].trim().substring(0, 3) === `/**` ||
-          !excludeComments
-        ) {
+      while ((result = regexp.exec(noComments)) && ++i < 100000) {
           ret.push(result);
-        }
       }
-      if (i == 1000) {
-        throw new Error("BOOM!\n" + ret[0] + "\n" + ret[1]);
+      if (i == 100000) {
+        throw new Error('** BOOM!!! **');
       }
       return ret;
     }
