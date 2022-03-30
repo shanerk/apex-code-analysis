@@ -9,6 +9,7 @@ module.exports = {
     let isTestClass = false;
     let isDeprecatedClass = false;
     const symbols = new Map();
+    const symbolsSource = new Map();
     const symbolsFileList = new Map();
     const declarations = new Map();
     const classMembers = new Map();
@@ -19,7 +20,7 @@ module.exports = {
       `Database`,
       `Enum`,
       `Interface`,
-      `System`
+      `System`,
     ];
 
     const RESERVED = [
@@ -30,7 +31,7 @@ module.exports = {
       `select`,
       `update`,
       `upsert`,
-      `where`
+      `where`,
     ];
 
     const HIDDEN_TAGS = [`@exclude`, `@hidden`];
@@ -96,12 +97,12 @@ module.exports = {
       `triggerold`,
       `type`,
       `url`,
-      `userinfo`
+      `userinfo`,
     ];
 
     let ExcludedTypesArrays = [];
 
-    EXCLUDED_TYPES.forEach(function(t) {
+    EXCLUDED_TYPES.forEach(function (t) {
       ExcludedTypesArrays.push(`${t}[]`);
       addDeclaration(undefined, t, true);
     });
@@ -119,7 +120,8 @@ module.exports = {
      *         group 5 = Initializer
      *         group 6 = Initializer Type Parameter (optional)
      */
-    const REGEX_DECLARATION = /([\w\[\]]+) *(<+.*>+)*[ \t]+([\w]+)\s*(?:=\s*(\[|new|\(+\1(?:<+.*>+)*\))*\s*([\w']+)(<+.*>+)*|;)/gim;
+    const REGEX_DECLARATION =
+      /([\w\[\]]+) *(<+.*>+)*[ \t]+([\w]+)\s*(?:=\s*(\[|new|\(+\1(?:<+.*>+)*\))*\s*([\w']+)(<+.*>+)*|;)/gim;
 
     const REGEX_FOR = /(?:for|catch)\s*\(([\w\. ]+)(<+.*>+)* ([\w]+)/gi;
 
@@ -128,9 +130,11 @@ module.exports = {
      *         group 2 = Type Parameter (optional)
      *         group 3 = Param name
      */
-    const REGEX_PARAM = /([a-zA-Z0-9_]+\s*(?:<+[a-zA-Z0-9_ ]+\,*[a-zA-Z0-9_ ]*>+)*\s*)([a-zA-Z0-9_]*)/gi;
+    const REGEX_PARAM =
+      /([a-zA-Z0-9_]+\s*(?:<+[a-zA-Z0-9_ ]+\,*[a-zA-Z0-9_ ]*>+)*\s*)([a-zA-Z0-9_]*)/gi;
 
-    const REGEX_PARAMETER_LIST = /[public|private|protected|global]+ [\w<>, \[\]]*\(([\w<>,. )]+)\)/gi;
+    const REGEX_PARAMETER_LIST =
+      /[public|private|protected|global]+ [\w<>, \[\]]*\(([\w<>,. )]+)\)/gi;
 
     const REGEX_STRING = /([\"'`])(?:[\s\S])*?(?:(?<!\\)\1)/gim;
     const REGEX_COMMENT = /\/\*\*(?:[^\*]|\*(?!\/))*.*?\*\//gim;
@@ -181,14 +185,14 @@ module.exports = {
       CLASS: 1,
       METHOD: 2,
       PROPERTY: 3,
-      CONSTRUCTOR: 4
+      CONSTRUCTOR: 4,
     };
 
     ///// Main /////////////////////////////////////////////////////////////////////////////////////////////////////////
-    return (function() {
+    return (function () {
       normalizeOptions();
       let raw = iterateFiles();
-      let data = formatOutput(raw);
+      let data = formatOutput();
       return data;
     })();
 
@@ -201,13 +205,13 @@ module.exports = {
           exclude: ["**/node_modules/**/*"],
           output: undefined,
           format: "markdown",
-          accessors: ["global", "public", "private", "protected"]
+          accessors: ["global", "public", "private", "protected"],
         },
         optionsArg
       );
       hasOutput = options.output;
       ///// Negate all the excluded patterns:
-      options.exclude = [].concat(options.exclude).map(function(item) {
+      options.exclude = [].concat(options.exclude).map(function (item) {
         if (item.charAt(0) === "!") {
           return item;
         }
@@ -230,7 +234,7 @@ module.exports = {
 
       __LOG__("Classes = " + classData.length);
 
-      classData.forEach(function(c) {
+      classData.forEach(function (c) {
         classes.push(getClass(c));
       });
 
@@ -239,14 +243,15 @@ module.exports = {
       classes = setClassPaths(classes); //.sort(ClassComparator);
 
       // Build parsedText
-      classes.forEach(function(c) {
-        parsedText += '\n' + c.bodyCodeOnly.replace(/this\./gi, `${c.toc.toLowerCase()}.`);
+      classes.forEach(function (c) {
+        parsedText +=
+          "\n" + c.bodyCodeOnly.replace(/this\./gi, `${c.toc.toLowerCase()}.`);
       });
 
-      // This handles for test classes, which won't have code in the parsedText
+      // This handles for test classes, the code for which will have been stripped from the parsedText
       parsedText = parsedText != null ? parsedText : text;
 
-      classData.forEach(function(data) {
+      classData.forEach(function (data) {
         __LOG__(
           `Class = ${classes[i].path} ${classes[i].isTest ? `Test Class` : ``}`
         );
@@ -264,14 +269,10 @@ module.exports = {
         if (members !== undefined) fileData = fileData.concat(members);
 
         // Adds members to the classMembers map with the class name as the key
-        members.forEach(function(m) {
+        members.forEach(function (m) {
           let symbol = m[0].toc.substr(0, m[0].toc.indexOf("("));
           //__DBG__(`${classes[i].path},${symbol}`);
-          addMember(
-            classes[i].path,
-            symbol,
-            fileName
-          );
+          addMember(classes[i].path, symbol, fileName);
         });
 
         i++;
@@ -285,23 +286,23 @@ module.exports = {
       ///// Standard Declarations
       declarationData = matchAll(parsedText, REGEX_DECLARATION, true);
       declarationCount += declarationData.length;
-      declarationData.forEach(function(data) {
+      declarationData.forEach(function (data) {
         addDeclaration(data[3], data[1] + (data[2] ?? ""));
       });
 
       ///// For Loop Declarations
       declarationData = matchAll(parsedText, REGEX_FOR, true);
       declarationCount += declarationData.length;
-      declarationData.forEach(function(data) {
+      declarationData.forEach(function (data) {
         addDeclaration(data[3], data[1] + (data[2] ?? ""));
       });
 
       ///// Param Declarations
       paramsData = matchAll(parsedText, REGEX_PARAMETER_LIST, true);
       declarationCount += paramsData.length;
-      paramsData.forEach(function(data) {
+      paramsData.forEach(function (data) {
         let params = matchAll(data[1], REGEX_PARAM, true);
-        params.forEach(function(param) {
+        params.forEach(function (param) {
           addDeclaration(param[2], param[1]);
         });
       });
@@ -309,21 +310,23 @@ module.exports = {
       __LOG__(`Declarations = ${declarationCount}`);
 
       ///// Internal References (to class methods inside this file)
-      classes.forEach(function(c) {
+      classes.forEach(function (c) {
         let apexClass = c.path.toLowerCase();
         //__DBG__('Class = ' + apexClass);
         // Check if the class has any members first, some classes may have no valid member methods such as test classes
         if (classMembers.get(apexClass)) {
-          classMembers.get(apexClass).forEach(function(method) {
+          classMembers.get(apexClass).forEach(function (method) {
             let methodCall = RegExp(
-              "^[ \\t\\w<>=,\\.]*(" + method + ")+[\\s]*\\([\\w\\d\\s\\(\\)'<>\\.,]*\\)\\s*[{|;]?",
+              "^[ \\t\\w<>=,\\.]*(" +
+                method +
+                ")+[\\s]*\\([\\w\\d\\s\\(\\)'<>\\.,]*\\)\\s*[{|;]?",
               "gim"
             );
             //__DBG__('Method = ' + method);
             let refs = matchAll(parsedText, methodCall, true);
             let symbol = `${apexClass}.${method}`.toLocaleLowerCase();
 
-            refs.forEach(function(r) {
+            refs.forEach(function (r) {
               r[0] = r[0].replace(/[\s]/g, ` `);
               // Include all refs but not method declarations
               if (!r[0].match(REGEX_METHOD)) {
@@ -337,7 +340,7 @@ module.exports = {
 
       ///// External References (to class methods outside this file)
       symbolData = matchAll(parsedText, REGEX_SYMBOL, true);
-      symbolData.forEach(function(data) {
+      symbolData.forEach(function (data) {
         let v = data[1].toLowerCase();
         let type = declarations.get(v) ?? `${v}`;
 
@@ -410,10 +413,10 @@ module.exports = {
     function parseData(rawData, entityType, header) {
       let fileDataLines = [];
 
-      rawData.forEach(function(data) {
+      rawData.forEach(function (data) {
         let lastObject = {
           name: "default",
-          text: ""
+          text: "",
         };
         let commentData = [];
 
@@ -458,208 +461,42 @@ module.exports = {
     }
 
     ///// Format Output ////////////////////////////////////////////////////////////////////////////////////////////////
-    function formatOutput(docComments) {
+    function formatOutput() {
       const fs = require("fs");
       const path = require("path");
       const mkdirp = require("mkdirp");
-      let data = undefined;
-      if (options.format === "markdown") {
-        let tocData = "";
-        data = "";
-        for (let file in docComments) {
-          let docCommentsFile = docComments[file];
-          let firstProp = true;
-          let firstParam = true;
-          let isMethod = false;
-          let parentName;
-          let className;
-          for (let a = 0; a < docCommentsFile.length; a++) {
-            let cdataList = docCommentsFile[a];
-            if (cdataList === null || cdataList === undefined) break;
-            for (let b = 0; b < cdataList.length; b++) {
-              (function(cdata) {
-                ///// Stage the data
-                let entityType =
-                  cdata[b].name === undefined
-                    ? ""
-                    : cdata[b].name.replace(/^@/g, "");
-                let text =
-                  cdata[b].text === undefined
-                    ? ""
-                    : cdata[b].text.replace(/\n/gm, " ").trim();
-                let entitySubtype =
-                  cdata[b].type === undefined
-                    ? ""
-                    : cdata[b].type.replace(/\n/gm, " ");
-                let entityName =
-                  cdata[b].toc === undefined
-                    ? ""
-                    : cdata[b].toc.replace(/\n/gm, " ");
-                let classPath =
-                  cdata[b].path === undefined
-                    ? ""
-                    : cdata[b].path.replace(/\n/gm, " ");
-                let body = cdata[b].body === undefined ? "" : cdata[b].body;
-                let descrip =
-                  cdata[b].descrip === undefined
-                    ? ""
-                    : cdata[b].descrip.replace(/\n/gm, " ").trim();
-                let codeBlock = matchAll(
-                  cdata[b].text,
-                  REGEX_COMMENT_CODE_BLOCK
-                );
-                let isDeprecated =
-                  cdata[b].isDeprecated ||
-                  (isDeprecatedClass && cdata[b].level > 0);
-                let deprecated = isDeprecated ? ` *deprecated*` : ``;
 
-                ///// Propercase entityType
-                if (entityType.length) {
-                  entityType =
-                    entityType[0].toUpperCase() + entityType.substr(1);
-                }
-                if (CLASS_TYPES.includes(entityType)) {
-                  firstProp = true;
-                  isMethod = false;
-                  parentName = entityName;
-                }
-                if (entityType === `Method`) {
-                  firstParam = true;
-                  isMethod = true;
-                  parentName = entityName;
-                }
-
-                ///// Code Blocks
-                if (codeBlock.length > 0 && codeBlock[0] !== undefined) {
-                  codeBlock.forEach(function(block) {
-                    text = text.replace(
-                      block[0].replace(/\n/gm, ` `),
-                      "\n##### Example:\n```" +
-                        getLang(file) +
-                        undentBlock(block[1]) +
-                        "```\n"
-                    );
-                  });
-                }
-
-                ///// Classes, Enum & Interface types
-                if (CLASS_AND_ENUM_TYPES.includes(entityType)) {
-                  entityType = entityType.toLowerCase();
-                  className = classPath;
-                  tocData += `\n1. [${classPath} ${entityType}](#${classPath.replace(
-                    /\s/g,
-                    "-"
-                  )}-${entityType}) ${deprecated}`;
-                  text = `${classPath} ${entityType}${deprecated}`;
-                  text = `\n---\n### ${text}`;
-
-                  ///// Enum values
-                  if (entityType === "enum" && body !== undefined) {
-                    text += `\n${descrip}`;
-                    text += "\n\n|Values|\n|:---|";
-                    getEnumBody(body).forEach(function(enumText) {
-                      text += `\n|${enumText}|`;
-                    });
-                  }
-
-                  ///// Methods
-                } else if (entityType === "Method") {
-                  let key = `${className}.${entityName}`;
-                  key = key.substring(0, key.indexOf(`(`)).toLowerCase();
-                  let value = symbols.get(key);
-                  let refs = `${value} refs: ${outputFileList(key)}`;
-
-                  tocData += `\n   * ${escapeAngleBrackets(
-                    entityName
-                  )}${deprecated}`;
-                  text = `#### ${escapeAngleBrackets(
-                    text
-                  )}${deprecated}\n* ${refs}`;
-
-                  ///// Parameters
-                } else if (entityType === "Param") {
-                  let pname = text.substr(0, text.indexOf(" "));
-                  let descrip = text.substr(text.indexOf(" "));
-                  if (isMethod) {
-                    if (firstParam) {
-                      data +=
-                        "\n##### Parameters:\n\n|Name|Description|\n|:---|:---|\n";
-                      firstParam = false;
-                    }
-                    text = `|${pname}${deprecated}|${descrip}|`;
-                  } else {
-                    text = `* TODO: Parameter ${pname} defined in class comment; move to method or constructor.`;
-                  }
-
-                  ///// Return values
-                } else if (entityType === "Return") {
-                  if (isMethod) {
-                    text = "\n##### Return value:\n\n" + text;
-                  } else {
-                    text = `* TODO: Return value defined in class comment, but should not be.`;
-                  }
-
-                  ///// Properties
-                } else if (entityType === "Property") {
-                  if (firstProp) {
-                    data +=
-                      "\n#### Properties\n\n|Static?|Type|Property|Description|" +
-                      "\n|:---|:---|:---|:---|\n";
-                    firstProp = false;
-                  }
-                  let static = cdata[b].static ? "Yes" : " ";
-                  descrip = descrip.replace(/\/\*\*/g, "");
-                  text = `|${static}|${entitySubtype}|${text}|${descrip}${deprecated}|`;
-                } else if (entityType === "Author") {
-                  text = "";
-                }
-                data += `${text}\n`;
-              })(cdataList);
-            }
-          }
-          data += "\n";
-        }
-        /////File header
-        data = "# API Reference\n" + tocData + "\n" + data;
-      } else {
-        data = JSON.stringify(docComments, null, 4);
-      }
-
-      ///// CSV References file
+      ///// Create CSV file
       let csvData = "";
+      let sourceFile = "";
       let symbolsAsc = new Map([...symbols.entries()].sort());
-      symbolsAsc.forEach(function(value, key) {
-        csvData += `\n"${key}",${value},"${outputFileList(key)}"`;
-      });
-      csvData = `Method,References,Files` + csvData;
-
-      if (options.output === undefined) {
-        console.log(data);
-
-        ///// Write out to the specified file
-      } else {
-        __LOG__("Writing results to: " + options.output);
-        let csvFile =
-          options.output.substring(0, options.output.indexOf(`.`)) + `.csv`;
-
-        let folder = path.dirname(options.output);
-        if (fs.existsSync(folder)) {
-          if (fs.lstatSync(folder).isDirectory()) {
-            fs.writeFileSync(options.output, data, "utf8");
-            fs.writeFileSync(csvFile, csvData, "utf8");
-          } else {
-            throw {
-              name: "DumpingResultsError",
-              message: "Destination folder is already a file"
-            };
-          }
-        } else {
-          mkdirp.sync(folder);
-          fs.writeFileSync(options.output, data, "utf8");
-          fs.writeFileSync(csvFile, csvData, "utf8");
+      symbolsAsc.forEach(function (value, key) {
+        sourceFile = symbolsSource.get(key);
+        if (sourceFile != undefined) {
+          csvData += `\n"${key}",${value},"${sourceFile}","${outputFileList(
+            key
+          )}"`;
         }
+      });
+      csvData = `Method,References,Source,Files` + csvData;
+
+      ///// Write out the csv
+      __LOG__(
+        "FINISHED PROCESSING\nWriting results to: " + options.output,
+        true,
+        true
+      );
+      let csvFile =
+        options.output.substring(0, options.output.indexOf(`.`)) + `.csv`;
+
+      let folder = path.dirname(options.output);
+
+      if (!fs.existsSync(folder)) {
+        mkdirp.sync(folder);
       }
-      return data;
+      fs.writeFileSync(csvFile, csvData, "utf8");
+
+      return csvData;
     }
 
     ///// Iterate Files ////////////////////////////////////////////////////////////////////////////////////////////////
@@ -667,7 +504,7 @@ module.exports = {
       const globule = require("globule");
       const fs = require("fs");
       let docComments = {};
-      __LOG__("Starting...");
+      __LOG__("STARTING...", true, true);
       const files = globule.find(
         [].concat(options.include).concat(options.exclude)
       );
@@ -684,7 +521,7 @@ module.exports = {
           continue;
         }
         let lang = getLang(file);
-        __LOG__(`File = ${file} Lang: ${lang}`, 1);
+        __LOG__(`File = ${file} Lang: ${lang}`, true);
         let contents = fs.readFileSync(file).toString();
         let matches = parseFile(contents, lang, file);
         if (matches.length !== 0) {
@@ -738,9 +575,12 @@ module.exports = {
       }
     }
 
-    function addMember(apexClass, member, fileName) {
-      if (!apexClass | !member) {
+    function addMember(apexClass, member, path) {
+      if (!apexClass | !member | !path) {
         return;
+      }
+      if (path.indexOf("/") != -1) {
+        path = path.substr(path.lastIndexOf("/") + 1, path.length);
       }
       apexClass = apexClass.toLowerCase().trim();
       member = member.toLowerCase().trim();
@@ -751,7 +591,9 @@ module.exports = {
         classMembers.get(apexClass).push(member);
       }
       symbols.set(symbol, (symbols.get(symbol) ?? 0) + 0);
-      addFileToSymbol(symbol, fileName);
+      symbolsSource.set(symbol, path);
+      symbolsFileList.set(symbol, classMembers.get(apexClass).path);
+      addFileToSymbol(symbol, path);
     }
 
     function addFileToSymbol(symbol, fileName) {
@@ -769,7 +611,7 @@ module.exports = {
       let ret = ``;
       let files = symbolsFileList.get(symbol);
       if (!files) return ret;
-      files.forEach(function(f) {
+      files.forEach(function (f) {
         ret += `${f}, `;
       });
       ret = ret.substr(0, ret.length - 2);
@@ -788,13 +630,9 @@ module.exports = {
     function matchAll(str, regexp, excludeComments) {
       let ret = [];
       let result = undefined;
-      let i = 0;
       let noComments = str.replace(REGEX_COMMENT, ``).replace(/\/\/.*/g, ``);
-      while ((result = regexp.exec(noComments)) && ++i < 100000) {
-          ret.push(result);
-      }
-      if (i == 100000) {
-        throw new Error('** BOOM!!! **');
+      while ((result = regexp.exec(noComments))) {
+        ret.push(result);
       }
       return ret;
     }
@@ -803,7 +641,7 @@ module.exports = {
       let ret = false;
       let jd = data[0].match(REGEX_COMMENT);
       if (jd === null) return false;
-      HIDDEN_TAGS.forEach(function(tag) {
+      HIDDEN_TAGS.forEach(function (tag) {
         if (jd[0].toLowerCase().includes(tag)) {
           ret = true;
           return;
@@ -846,7 +684,7 @@ module.exports = {
         start: data.index,
         isDeprecated: data[0].includes(`@Deprecated`),
         isCommentRequired: true,
-        isExclude: isHidden(data)
+        isExclude: isHidden(data),
       };
       return ret;
     }
@@ -862,7 +700,7 @@ module.exports = {
         start: data.index,
         isDeprecated: data[0].includes(`@Deprecated`),
         isCommentRequired: true,
-        isExclude: isHidden(data)
+        isExclude: isHidden(data),
       };
       return ret;
     }
@@ -877,7 +715,7 @@ module.exports = {
         start: data.index,
         isDeprecated: data[0].includes(`@Deprecated`),
         isCommentRequired: true,
-        isExclude: isHidden(data)
+        isExclude: isHidden(data),
       };
       return ret;
     }
@@ -906,20 +744,20 @@ module.exports = {
         isTest: data[0].includes(`@isTest`),
         isCommentRequired:
           data[3] !== `enum` && (!data[5] || data[5].includes(`exception`)),
-        isExclude: isHidden(data)
+        isExclude: isHidden(data),
       };
       return ret;
     }
 
     function setLevels(classes) {
-      classes.forEach(function(cur) {
+      classes.forEach(function (cur) {
         cur.level = recLevel(cur, classes.slice(0), 0);
       });
       return classes;
     }
 
     function recLevel(target, classes, level) {
-      classes.forEach(function(cur) {
+      classes.forEach(function (cur) {
         if (target !== cur) {
           let isChild = cur.body.includes(target.signature);
           if (isChild) {
@@ -933,14 +771,14 @@ module.exports = {
     }
 
     function setClassPaths(classes) {
-      classes.forEach(function(cur) {
+      classes.forEach(function (cur) {
         cur.path = recPath(cur, cur.path, classes.slice(0)) + cur.toc;
       });
       return classes;
     }
 
     function recPath(target, path, classes) {
-      classes.forEach(function(cur) {
+      classes.forEach(function (cur) {
         if (target !== cur) {
           let isChild = cur.body.includes(target.signature);
           if (isChild) {
@@ -958,10 +796,10 @@ module.exports = {
      * @param {*} classes
      */
     function setClassBodyCodeOnly(classes) {
-      classes.forEach(function(c) {
+      classes.forEach(function (c) {
         if (c.body === undefined) return; // continue the forEach
         c.bodyCodeOnly = c.body;
-        classes.forEach(function(comp) {
+        classes.forEach(function (comp) {
           if (c !== comp) {
             let isChild = c.body.includes(comp.signature);
             if (isChild) {
@@ -984,14 +822,14 @@ module.exports = {
     function getEndIndex(data) {
       let codeBlock = data.input.substring(data.index, data.input.length);
       ///// Replace comment bodies with spaces to prevent non-code matches, while still keeping the indexes the same
-      codeBlock = codeBlock.replace(REGEX_COMMENT, function(match, p1) {
+      codeBlock = codeBlock.replace(REGEX_COMMENT, function (match, p1) {
         return "/**" + "".padStart(match.length - 5, "%") + "*/";
       });
-      codeBlock = codeBlock.replace(REGEX_COMMENT_INLINE, function(match, p1) {
+      codeBlock = codeBlock.replace(REGEX_COMMENT_INLINE, function (match, p1) {
         return "//".padEnd(match.length, "%");
       });
       ///// Replace string literals with spaces to prevent non-code matches, while still keeping the indexes the same
-      codeBlock = codeBlock.replace(REGEX_STRING, function(match, p1) {
+      codeBlock = codeBlock.replace(REGEX_STRING, function (match, p1) {
         return p1 + "".padStart(match.length - 2, "%") + p1;
       });
       let ob = 0;
@@ -1009,7 +847,7 @@ module.exports = {
     }
 
     function escapeAngleBrackets(str) {
-      return str.replace(/([\<\>])/g, function(match) {
+      return str.replace(/([\<\>])/g, function (match) {
         return `\\${match}`;
       });
     }
@@ -1021,13 +859,13 @@ module.exports = {
     function undentBlock(block) {
       let REGEX_INDEX = /^[ \t]*\**[ \t]+/g;
       let indent = null;
-      block.split("\n").forEach(function(line) {
+      block.split("\n").forEach(function (line) {
         let match = line.match(REGEX_INDEX);
         let cur = match !== null ? match[0].length : null;
         if (cur < indent || indent === null) indent = cur;
       });
       let ret = "";
-      block.split("\n").forEach(function(line) {
+      block.split("\n").forEach(function (line) {
         line = undent(line, indent);
         ret += line;
       });
@@ -1064,7 +902,7 @@ module.exports = {
       //*/
     }
 
-    function __LOG__(msg, bump) {
+    function __LOG__(msg, bump, div) {
       if (options.output === undefined) {
         return;
       }
@@ -1073,7 +911,12 @@ module.exports = {
       if (bump) {
         console.log(`\n`);
       }
+      if (div) {
+        console.log(
+          "**********************************************************************"
+        );
+      }
       console.log.apply(console, ["[LOG] " + msg]);
     }
-  }
+  },
 };
